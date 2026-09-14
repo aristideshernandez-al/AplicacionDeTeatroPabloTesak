@@ -7,26 +7,26 @@ import {
   Settings, ShieldCheck, Theater, Users, X, Clock3, MapPin, ArrowRight,
   UserRound, CircleHelp, Send, ListChecks,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { addDoc, collection, getDocs, orderBy, query as firestoreQuery, serverTimestamp, where } from 'firebase/firestore'
+import { AuthGate, useAuthSession } from '@/components/auth-gate'
+import { getFirebase } from '@/lib/firebase/client'
 import type { LucideIcon } from 'lucide-react'
 
-type Status = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
+type Status = 'DRAFT' | 'SUBMITTED' | 'ENVIADO' | 'EVIADO' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
 type ActivityRow = {
   id: string
-  code: string | null
-  nombre_actividad: string
-  tipo_actividad: string
-  area_incidencia: string
-  fecha: string | null
-  responsible_name: string
+  code: string
+  nombreActividad: string
+  tipoActividad: string
+  areaIncidencia: string
+  fecha: string
+  responsibleName: string
+  horaInicio: string
+  horaFin: string
   status: Status
 }
-type InstitutionRow = { id: string; name: string; department: string; type: string }
-type ProfileRow = { id: string; full_name: string | null; role: string; active: boolean }
-const supabaseConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL &&
-  (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-)
+type InstitutionRow = { id: string; name: string; department: string; municipality: string; type: string }
+type ProfileRow = { id: string; fullName: string | null; email: string; role: string; active: boolean }
 
 const nav: readonly (readonly [string, LucideIcon])[] = [
   ['Resumen', House],
@@ -36,7 +36,7 @@ const nav: readonly (readonly [string, LucideIcon])[] = [
   ['Ajustes', Settings],
 ] as const
 const labels: Record<Status, string> = {
-  APPROVED: 'Aprobada', SUBMITTED: 'En revisión', REJECTED: 'Rechazada',
+  APPROVED: 'Aprobada', SUBMITTED: 'En revisión', ENVIADO: 'En revisión', EVIADO: 'En revisión', REJECTED: 'Rechazada',
   DRAFT: 'Borrador', ARCHIVED: 'Archivada',
 }
 
@@ -56,7 +56,12 @@ function formatDate(value: string | null) {
 }
 
 export default function Page() {
-  const supabase = useMemo(() => createClient(), [])
+  return <AuthGate><Dashboard /></AuthGate>
+}
+
+function Dashboard() {
+  const { user, profile, signOutUser } = useAuthSession()
+  const db = useMemo(() => getFirebase().db, [])
   const [active, setActive] = useState('Resumen')
   const [activities, setActivities] = useState<ActivityRow[]>([])
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([])
@@ -64,37 +69,38 @@ export default function Page() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', type: 'Taller', area: 'Formación artística', date: '' })
-  const [userName, setUserName] = useState('Equipo de coordinación')
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [form, setForm] = useState({ name: '', type: 'Taller', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', evaluation: '' })
   const [mobileOpen, setMobileOpen] = useState(false)
+  const userName = profile.fullName || user.displayName || user.email?.split('@')[0] || 'Colaborador'
+  const isAdmin = profile.role === 'ADMIN'
 
   useEffect(() => {
     let alive = true
-    if (!supabaseConfigured) {
-      setLoading(false)
-      return () => { alive = false }
-    }
     ;(async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!alive) return
-        let admin = false
-        if (user) {
-          setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'Colaborador')
-          const profile = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-          admin = profile.data?.role === 'ADMIN'
-          setIsAdmin(admin)
-        }
-        const [activityResult, institutionResult, profileResult] = await Promise.all([
-          supabase.from('activities').select('id,code,nombre_actividad,tipo_actividad,area_incidencia,fecha,responsible_name,status').order('created_at', { ascending: false }).limit(100),
-          supabase.from('activity_institutions').select('id,name,department,type').order('name'),
-          admin ? supabase.from('profiles').select('id,full_name,role,active').order('full_name') : Promise.resolve({ data: [] as ProfileRow[] }),
+        const activityQuery = isAdmin
+          ? firestoreQuery(collection(db, 'activities'), orderBy('createdAt', 'desc'))
+          : firestoreQuery(collection(db, 'activities'), where('responsibleId', '==', user.uid))
+        const [activitySnapshot, institutionSnapshot, profileSnapshot] = await Promise.all([
+          getDocs(activityQuery),
+          getDocs(collection(db, 'institutions')),
+          isAdmin ? getDocs(firestoreQuery(collection(db, 'users'), orderBy('fullName'))) : Promise.resolve(null),
         ])
         if (!alive) return
-        if (activityResult.data) setActivities(activityResult.data as ActivityRow[])
-        if (institutionResult.data) setInstitutions(institutionResult.data as InstitutionRow[])
-        if (profileResult.data) setProfiles(profileResult.data as ProfileRow[])
+        const activityRows = activitySnapshot.docs.map((item) => {
+          const data = item.data()
+          return { id: item.id, code: data.code || '', nombreActividad: data.nombreActividad || '', tipoActividad: data.tipoActividad || '', areaIncidencia: data.areaIncidencia || '', fecha: data.fecha || '', responsibleName: data.responsibleName || '', horaInicio: data.horaInicio || '', horaFin: data.horaFin || '', status: (data.status || 'DRAFT') as Status }
+        })
+        if (!isAdmin) activityRows.sort((a, b) => (parseDate(b.fecha)?.getTime() || 0) - (parseDate(a.fecha)?.getTime() || 0))
+        setActivities(activityRows)
+        setInstitutions(institutionSnapshot.docs.map((item) => {
+          const data = item.data()
+          return { id: item.id, name: data.name || item.id, department: data.department || '', municipality: data.municipality || '', type: data.type || '' }
+        }))
+        if (profileSnapshot) setProfiles(profileSnapshot.docs.map((item) => {
+          const data = item.data()
+          return { id: item.id, fullName: data.fullName || null, email: data.email || '', role: data.role || 'USER', active: data.active !== false }
+        }))
       } catch {
         // Keep the dashboard usable when the service is unreachable.
       } finally {
@@ -102,33 +108,39 @@ export default function Page() {
       }
     })()
     return () => { alive = false }
-  }, [supabase])
+  }, [db, isAdmin, user.uid])
 
   async function saveActivity() {
     if (!form.name.trim()) return
-    const { data: { user } } = supabaseConfigured ? await supabase.auth.getUser() : { data: { user: null } }
-    const local: ActivityRow = {
-      id: crypto.randomUUID(),
-      code: `ACT-${new Date().getFullYear()}-${String(activities.length + 42).padStart(3, '0')}`,
-      nombre_actividad: form.name, tipo_actividad: form.type, area_incidencia: form.area,
-      fecha: form.date || new Date().toISOString().slice(0, 10), responsible_name: userName, status: 'DRAFT',
+    const date = parseDate(form.date)
+    const firebaseDate = date ? `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}` : ''
+    const activity = {
+      code: '', responsibleId: user.uid, responsibleName: userName,
+      areaIncidencia: form.area, tipoActividad: form.type, otroTipoActividad: '',
+      nombreActividad: form.name.trim(), fecha: firebaseDate, horaInicio: form.startTime, horaFin: form.endTime,
+      antecedentes: form.background, objetivo: form.objective, descripcion: form.description, evaluacionSeguimiento: form.evaluation,
+      selectedSpaces: [], otherSpace: '', institutions: [],
+      participants: { teachers: 0, studentsF: 0, studentsM: 0, community: 0, artists: 0, totalGeneral: 0 },
+      technicalInfo: { usedEquipment: false, equipment: [], otherEquipment: '', observations: '', failures: '', requiresReview: '' },
+      photoUrls: [], attendanceListUrls: [], otherAnnexUrls: [],
+      status: 'DRAFT', adminObservation: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     }
-    if (user) {
-      const { data } = await supabase.from('activities').insert({
-        responsible_id: user.id, responsible_name: userName, nombre_actividad: form.name,
-        tipo_actividad: form.type, area_incidencia: form.area, fecha: form.date || null, status: 'DRAFT',
-      }).select('id,code,nombre_actividad,tipo_actividad,area_incidencia,fecha,responsible_name,status').single()
-      setActivities((current) => [data ? data as ActivityRow : local, ...current])
-    } else setActivities((current) => [local, ...current])
-    setForm({ name: '', type: 'Taller', area: 'Formación artística', date: '' })
+    const result = await addDoc(collection(db, 'activities'), activity)
+    setActivities((current) => [{
+      id: result.id, code: '', nombreActividad: activity.nombreActividad,
+      tipoActividad: activity.tipoActividad, areaIncidencia: activity.areaIncidencia,
+      fecha: activity.fecha, responsibleName: userName, horaInicio: activity.horaInicio,
+      horaFin: activity.horaFin, status: 'DRAFT',
+    }, ...current])
+    setForm({ name: '', type: 'Taller', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', evaluation: '' })
     setShowForm(false)
   }
 
   const visible = activities.filter((item) =>
-    `${item.nombre_actividad} ${item.code || ''} ${item.responsible_name}`.toLowerCase().includes(query.toLowerCase()),
+    `${item.nombreActividad} ${item.code || ''} ${item.responsibleName}`.toLowerCase().includes(query.toLowerCase()),
   )
   const approved = activities.filter((item) => item.status === 'APPROVED').length
-  const pending = activities.filter((item) => item.status === 'SUBMITTED').length
+  const pending = activities.filter((item) => ['SUBMITTED', 'ENVIADO', 'EVIADO'].includes(item.status)).length
   const drafts = activities.filter((item) => item.status === 'DRAFT').length
   const thisMonth = activities.filter((item) => {
     const date = parseDate(item.fecha)
@@ -200,7 +212,7 @@ export default function Page() {
           {active === 'Instituciones' && <DirectoryPage type="institutions" institutions={institutions} />}
           {active === 'Usuarios' && <DirectoryPage type="users" profiles={profiles} isAdmin={isAdmin} />}
           {active === 'Reportes' && <ReportsPage activities={activities} />}
-          {active === 'Ajustes' && <SettingsPage userName={userName} isAdmin={isAdmin} />}
+          {active === 'Ajustes' && <SettingsPage userName={userName} email={user.email || ''} isAdmin={isAdmin} onSignOut={signOutUser} />}
         </>}
         {showForm && <ActivityForm form={form} setForm={setForm} onClose={() => setShowForm(false)} onSave={saveActivity} />}
       </div>
@@ -233,15 +245,34 @@ function MetricCard({ icon, label, value, tone, onClick }: { icon: React.ReactNo
 
 function ActivityList({ items }: { items: ActivityRow[] }) {
   return <div className="activity-list">{items.map((item) => <article className="activity-row" key={item.id}>
-    <div className="activity-icon"><ClipboardList size={18} /></div><div className="activity-info"><strong>{item.nombre_actividad || 'Actividad sin nombre'}</strong><span>{item.code || 'Sin código'} <b>·</b> {item.tipo_actividad || 'Sin tipo'} <b>·</b> {formatDate(item.fecha)}</span></div><div className="activity-owner">{item.responsible_name}</div><span className={`status ${item.status.toLowerCase()}`}>{labels[item.status]}</span>
+    <div className="activity-icon"><ClipboardList size={18} /></div><div className="activity-info"><strong>{item.nombreActividad || 'Actividad sin nombre'}</strong><span>{item.code || 'Sin código'} <b>·</b> {item.tipoActividad || 'Sin tipo'} <b>·</b> {formatDate(item.fecha)}</span></div><div className="activity-owner">{item.responsibleName}</div><span className={`status ${item.status.toLowerCase()}`}>{labels[item.status] || item.status}</span>
   </article>)}</div>
 }
 
-function ActivityForm({ form, setForm, onClose, onSave }: { form: { name: string; type: string; area: string; date: string }; setForm: (value: { name: string; type: string; area: string; date: string }) => void; onClose: () => void; onSave: () => void }) {
+type ActivityFormValues = { name: string; type: string; area: string; date: string; startTime: string; endTime: string; background: string; objective: string; description: string; evaluation: string }
+
+function ActivityForm({ form, setForm, onClose, onSave }: { form: ActivityFormValues; setForm: (value: ActivityFormValues) => void; onClose: () => void; onSave: () => Promise<void> }) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  async function submitActivity() {
+    setSaving(true)
+    setError('')
+    try {
+      await onSave()
+    } catch (cause) {
+      const code = typeof cause === 'object' && cause && 'code' in cause ? String(cause.code) : ''
+      setError(code.includes('permission-denied')
+        ? 'No tienes permiso para guardar la actividad. Verifica que tu cuenta esté activa.'
+        : 'No se pudo guardar el borrador. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setSaving(false)
+    }
+  }
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="form-card" role="dialog" aria-modal="true" aria-labelledby="form-title">
     <div className="form-heading"><div><span className="form-kicker">NUEVO REGISTRO</span><strong id="form-title">Registrar actividad</strong><span>Guarda un borrador y completa los detalles cuando quieras.</span></div><button className="icon-button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button></div>
-    <div className="form-grid"><label>Nombre de la actividad<input autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ej. Taller de teatro comunitario" /></label><label>Tipo de actividad<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option>Taller</option><option>Presentación</option><option>Reunión</option><option>Festival</option><option>Capacitación</option></select></label><label>Área de incidencia<select value={form.area} onChange={(event) => setForm({ ...form, area: event.target.value })}><option>Formación artística</option><option>Educación</option><option>Gestión cultural</option><option>Participación comunitaria</option></select></label><label>Fecha<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label></div>
-    <div className="form-actions"><button className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" onClick={onSave} disabled={!form.name.trim()}><Send size={16} />Guardar borrador</button></div>
+    <div className="form-grid"><label>Nombre de la actividad<input autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ej. Taller de teatro comunitario" /></label><label>Tipo de actividad<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option>Taller</option><option>Presentación</option><option>Reunión</option><option>Festival</option><option>Capacitación</option></select></label><label>Área de incidencia<select value={form.area} onChange={(event) => setForm({ ...form, area: event.target.value })}><option>Formación artística</option><option>Educación</option><option>Gestión cultural</option><option>Participación comunitaria</option></select></label><label>Fecha<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label><label>Hora de inicio<input type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></label><label>Hora de finalización<input type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></label><label className="form-wide">Antecedentes<textarea value={form.background} onChange={(event) => setForm({ ...form, background: event.target.value })} rows={2} /></label><label className="form-wide">Objetivo<textarea value={form.objective} onChange={(event) => setForm({ ...form, objective: event.target.value })} rows={2} /></label><label className="form-wide">Descripción<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} /></label><label className="form-wide">Evaluación y seguimiento<textarea value={form.evaluation} onChange={(event) => setForm({ ...form, evaluation: event.target.value })} rows={2} /></label></div>
+    {error && <div className="auth-message error" role="alert">{error}</div>}
+    <div className="form-actions"><button className="secondary-button" onClick={onClose} disabled={saving}>Cancelar</button><button className="primary-button" onClick={() => void submitActivity()} disabled={!form.name.trim() || saving}>{saving ? 'Guardando…' : <><Send size={16} />Guardar borrador</>}</button></div>
   </section></div>
 }
 
@@ -256,12 +287,12 @@ function ActivityPage({ activities, query, setQuery }: { activities: ActivityRow
 function DirectoryPage({ type, institutions = [], profiles = [], isAdmin = false }: { type: 'institutions' | 'users'; institutions?: InstitutionRow[]; profiles?: ProfileRow[]; isAdmin?: boolean }) {
   const institution = type === 'institutions'
   const empty = institution ? 'No hay instituciones registradas.' : isAdmin ? 'No hay usuarios registrados.' : 'El listado de usuarios está disponible para administradores.'
-  return <section className="panel page-panel"><div className="directory-list">{institution ? institutions.map((row) => <div className="directory-row" key={row.id}><div className="directory-icon"><Building2 size={19} /></div><div><strong>{row.name}</strong><span><MapPin size={13} />{row.department || 'Departamento no indicado'}</span></div><span className="directory-tag">{row.type}</span></div>) : profiles.map((row) => <div className="directory-row" key={row.id}><div className="directory-icon"><UserRound size={19} /></div><div><strong>{row.full_name || 'Usuario sin nombre'}</strong><span>{row.role}</span></div><span className={`directory-tag ${row.active ? '' : 'inactive'}`}>{row.active ? 'Activo' : 'Inactivo'}</span></div>)}{((institution && institutions.length === 0) || (!institution && profiles.length === 0)) && <EmptyState text={empty} />}</div></section>
+  return <section className="panel page-panel"><div className="directory-list">{institution ? institutions.map((row) => <div className="directory-row" key={row.id}><div className="directory-icon"><Building2 size={19} /></div><div><strong>{row.name}</strong><span><MapPin size={13} />{row.department || 'Departamento no indicado'}</span></div><span className="directory-tag">{row.type}</span></div>) : profiles.map((row) => <div className="directory-row" key={row.id}><div className="directory-icon"><UserRound size={19} /></div><div><strong>{row.fullName || 'Usuario sin nombre'}</strong><span>{row.email} · {row.role}</span></div><span className={`directory-tag ${row.active ? '' : 'inactive'}`}>{row.active ? 'Activo' : 'Inactivo'}</span></div>)}{((institution && institutions.length === 0) || (!institution && profiles.length === 0)) && <EmptyState text={empty} />}</div></section>
 }
 
 function ReportsPage({ activities }: { activities: ActivityRow[] }) {
   const downloadCsv = () => {
-    const rows = [['Código', 'Actividad', 'Tipo', 'Área', 'Fecha', 'Responsable', 'Estado'], ...activities.map((item) => [item.code || '', item.nombre_actividad, item.tipo_actividad, item.area_incidencia, item.fecha || '', item.responsible_name, labels[item.status]])]
+    const rows = [['Código', 'Actividad', 'Tipo', 'Área', 'Fecha', 'Responsable', 'Estado'], ...activities.map((item) => [item.code || '', item.nombreActividad, item.tipoActividad, item.areaIncidencia, item.fecha || '', item.responsibleName, labels[item.status] || item.status])]
     const csv = rows.map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(',')).join('\n')
     const link = document.createElement('a')
     link.href = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' }))
@@ -272,11 +303,12 @@ function ReportsPage({ activities }: { activities: ActivityRow[] }) {
   return <section className="report-grid"><ReportCard icon={<FileBarChart size={24} />} title="Reporte de actividades" text="Descarga los registros con fecha, área y estado." action="Descargar CSV" onClick={downloadCsv} /><ReportCard icon={<Users size={24} />} title="Participación comunitaria" text="Consulta los registros vinculados a instituciones y comunidades." action="Ver instituciones" /><ReportCard icon={<CalendarDays size={24} />} title="Calendario institucional" text={`${activities.length} actividades disponibles para planificación.`} action="Consultar actividades" /></section>
 }
 
-function SettingsPage({ userName, isAdmin }: { userName: string; isAdmin: boolean }) {
+function SettingsPage({ userName, email, isAdmin, onSignOut }: { userName: string; email: string; isAdmin: boolean; onSignOut: () => Promise<void> }) {
   return <section className="settings-panel panel">
-    <div className="settings-profile"><div className="avatar">{userName[0]?.toUpperCase()}</div><div><strong>{userName}</strong><span>{isAdmin ? 'Administrador' : 'Colaborador'}</span></div></div>
+    <div className="settings-profile"><div className="avatar">{userName[0]?.toUpperCase()}</div><div><strong>{userName}</strong><span>{email}</span><span>{isAdmin ? 'Administrador' : 'Colaborador'}</span></div></div>
     <div className="settings-group"><h2>Aplicación</h2><div className="settings-row"><div><strong>Teatro Pablo Tesak</strong><span>Sistema de control y seguimiento de actividades</span></div><Theater size={20} /></div></div>
     <div className="settings-group"><h2>Preferencias</h2><div className="settings-row"><div><strong>Idioma</strong><span>Español</span></div><span className="directory-tag">Predeterminado</span></div></div>
+    <div className="settings-group"><h2>Cuenta</h2><button className="secondary-button" onClick={() => void onSignOut()}>Cerrar sesión</button></div>
   </section>
 }
 

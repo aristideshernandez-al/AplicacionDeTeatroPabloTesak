@@ -1,44 +1,55 @@
 # Aplicación web del Teatro Pablo Tesak
 
-Versión web del sistema de control y seguimiento de actividades del Teatro Pablo Tesak. Está diseñada para escritorio y teléfonos, tomando como referencia la aplicación Android.
+Versión web del sistema de control y seguimiento de actividades del Teatro Pablo Tesak. Su diseño se adapta a computadoras y teléfonos y toma como referencia la aplicación Android.
 
-## Funciones disponibles
+## Funciones
 
-- Resumen con actividades recientes, métricas del mes y estado de gestión.
-- Registro de actividades como borradores.
-- Búsqueda y filtro de actividades por estado.
-- Consulta de instituciones participantes.
-- Consulta de usuarios para perfiles administradores.
-- Descarga de un reporte de actividades en formato CSV.
-- Navegación adaptada a pantallas pequeñas.
+- Inicio de sesión con correo electrónico y contraseña.
+- Creación de cuenta con verificación por correo.
+- Acceso con Google.
+- Recuperación de contraseña por correo electrónico.
+- Resumen, búsqueda y filtro de actividades.
+- Registro de borradores con los datos principales de la actividad.
+- Consulta de instituciones y, para administradores, consulta de usuarios.
+- Descarga de reportes de actividades en formato CSV.
+- Cierre de sesión y navegación adaptable a pantallas pequeñas.
 
-## Tecnologías
-
-- Next.js y React
-- TypeScript
-- Tailwind CSS
-- Supabase para consultar y guardar información
+La web lee y guarda actividades, perfiles e instituciones en Firebase/Cloud Firestore, el mismo servicio utilizado por la aplicación Android.
 
 ## Requisitos
 
-Instala [Node.js](https://nodejs.org/) y `pnpm` antes de iniciar el proyecto.
+- Node.js 20 o posterior.
+- `pnpm`.
+- Un proyecto Firebase con Authentication y Cloud Firestore configurados.
+
+## Preparar Firebase
+
+1. En Firebase Console, abre el proyecto `teatropablotesak-78d51` o el proyecto que corresponda a tu instalación.
+2. En **Configuración del proyecto**, registra una aplicación web y copia su configuración. La aplicación Android no sustituye el registro web: utiliza el `appId` de la aplicación web.
+3. En **Authentication → Método de acceso**, habilita **Correo electrónico/contraseña** y **Google**.
+4. En **Authentication → Configuración → Dominios autorizados**, agrega `localhost` para desarrollo y el dominio donde publicarás la web.
+5. Verifica que Cloud Firestore tenga las reglas de seguridad del proyecto Android. La web crea perfiles de colaborador con rol `USER` y respeta los permisos definidos en Firestore.
 
 ## Instalación y ejecución
 
-Desde la carpeta del proyecto, instala las dependencias:
+Instala las dependencias:
 
 ```bash
 pnpm install
 ```
 
-Crea un archivo `.env.local` en la raíz del proyecto y agrega la URL y la clave pública de tu proyecto de Supabase:
+Crea `.env.local` en la carpeta principal del proyecto y agrega los valores de la aplicación web registrada en Firebase:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-clave-publica
+NEXT_PUBLIC_FIREBASE_API_KEY=tu-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=tu-proyecto.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=tu-proyecto
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=tu-proyecto.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=tu-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=tu-app-id-web
 ```
 
-Si tu proyecto todavía utiliza una clave anónima, puedes usar `NEXT_PUBLIC_SUPABASE_ANON_KEY` en lugar de `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. No agregues claves secretas o `service_role` a variables que comiencen con `NEXT_PUBLIC_`, ni compartas el archivo `.env.local`.
+Estas variables corresponden a la configuración pública del cliente web de Firebase. No agregues credenciales de cuentas de servicio ni claves privadas al navegador. `.env.local` está excluido de Git.
 
 Inicia el servidor local:
 
@@ -46,7 +57,7 @@ Inicia el servidor local:
 pnpm dev
 ```
 
-Abre [http://localhost:3000](http://localhost:3000) en el navegador.
+Abre [http://localhost:3000](http://localhost:3000).
 
 ## Comandos
 
@@ -56,17 +67,11 @@ Abre [http://localhost:3000](http://localhost:3000) en el navegador.
 | `pnpm build` | Genera la versión optimizada para producción. |
 | `pnpm start` | Ejecuta la versión de producción después de compilarla. |
 
-## Datos y configuración
-
-La versión web consulta las tablas `activities`, `activity_institutions` y `profiles` de Supabase. Para mostrar la sección de usuarios, el perfil debe tener el rol `ADMIN`.
-
-La aplicación Android de referencia usa Firebase. La versión web todavía usa Supabase, por lo que los datos no se sincronizan automáticamente entre ambas aplicaciones. Si no se configura Supabase, la web muestra el estado vacío y los borradores que se creen solo permanecen en la sesión actual del navegador.
-
 ## Estructura principal
 
 ```text
 app/                 Pantallas, diseño y estilos
-components/          Componentes reutilizables
-lib/supabase/        Cliente de conexión con Supabase
+components/          Autenticación y componentes reutilizables
+lib/firebase/        Conexión con Firebase Authentication y Firestore
 public/              Recursos estáticos
 ```
