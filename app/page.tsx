@@ -7,9 +7,9 @@ import {
   Settings, ShieldCheck, Theater, Users, X, Clock3, MapPin, ArrowRight,
   UserRound, CircleHelp, Send, ListChecks,
 } from 'lucide-react'
-import { addDoc, collection, getDocs, orderBy, query as firestoreQuery, serverTimestamp, where } from 'firebase/firestore'
 import { AuthGate, useAuthSession } from '@/components/auth-gate'
 import { getFirebase } from '@/lib/firebase/client'
+import { createClient as createSupabaseClient, supabaseConfigured } from '@/lib/supabase/client'
 import type { LucideIcon } from 'lucide-react'
 
 type Status = 'DRAFT' | 'SUBMITTED' | 'ENVIADO' | 'EVIADO' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
@@ -61,13 +61,17 @@ export default function Page() {
 
 function Dashboard() {
   const { user, profile, signOutUser } = useAuthSession()
-  const db = useMemo(() => getFirebase().db, [])
+  const supabase = useMemo(() => supabaseConfigured ? createSupabaseClient(async () => {
+    const currentUser = getFirebase().auth.currentUser
+    return currentUser ? currentUser.getIdToken() : null
+  }) : null, [])
   const [active, setActive] = useState('Resumen')
   const [activities, setActivities] = useState<ActivityRow[]>([])
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([])
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  const [dataError, setDataError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'Taller', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', evaluation: '' })
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -76,61 +80,73 @@ function Dashboard() {
 
   useEffect(() => {
     let alive = true
+    if (!supabase) {
+      setDataError('Falta configurar Supabase. Agrega la URL y la clave pública del proyecto en .env.local.')
+      setLoading(false)
+      return () => { alive = false }
+    }
     ;(async () => {
       try {
-        const activityQuery = isAdmin
-          ? firestoreQuery(collection(db, 'activities'), orderBy('createdAt', 'desc'))
-          : firestoreQuery(collection(db, 'activities'), where('responsibleId', '==', user.uid))
+        const activityQuery = supabase.from('activities')
+          .select('id,code,nombre_actividad,tipo_actividad,area_incidencia,fecha,responsible_name,status')
+          .order('created_at', { ascending: false })
+          .limit(100)
         const [activitySnapshot, institutionSnapshot, profileSnapshot] = await Promise.all([
-          getDocs(activityQuery),
-          getDocs(collection(db, 'institutions')),
-          isAdmin ? getDocs(firestoreQuery(collection(db, 'users'), orderBy('fullName'))) : Promise.resolve(null),
+          activityQuery,
+          supabase.from('activity_institutions').select('id,name,department,type').order('name'),
+          isAdmin ? supabase.from('profiles').select('id,full_name,role,active').order('full_name') : Promise.resolve({ data: [], error: null }),
         ])
+        const requestError = activitySnapshot.error || institutionSnapshot.error || profileSnapshot.error
+        if (requestError) throw requestError
         if (!alive) return
-        const activityRows = activitySnapshot.docs.map((item) => {
-          const data = item.data()
-          return { id: item.id, code: data.code || '', nombreActividad: data.nombreActividad || '', tipoActividad: data.tipoActividad || '', areaIncidencia: data.areaIncidencia || '', fecha: data.fecha || '', responsibleName: data.responsibleName || '', horaInicio: data.horaInicio || '', horaFin: data.horaFin || '', status: (data.status || 'DRAFT') as Status }
-        })
-        if (!isAdmin) activityRows.sort((a, b) => (parseDate(b.fecha)?.getTime() || 0) - (parseDate(a.fecha)?.getTime() || 0))
+        const activityRows: ActivityRow[] = (activitySnapshot.data || []).map((item) => ({
+          id: item.id, code: item.code || '', nombreActividad: item.nombre_actividad || '',
+          tipoActividad: item.tipo_actividad || '', areaIncidencia: item.area_incidencia || '',
+          fecha: item.fecha || '', responsibleName: item.responsible_name || '', horaInicio: '', horaFin: '',
+          status: (item.status || 'DRAFT') as Status,
+        }))
         setActivities(activityRows)
-        setInstitutions(institutionSnapshot.docs.map((item) => {
-          const data = item.data()
-          return { id: item.id, name: data.name || item.id, department: data.department || '', municipality: data.municipality || '', type: data.type || '' }
-        }))
-        if (profileSnapshot) setProfiles(profileSnapshot.docs.map((item) => {
-          const data = item.data()
-          return { id: item.id, fullName: data.fullName || null, email: data.email || '', role: data.role || 'USER', active: data.active !== false }
-        }))
-      } catch {
-        // Keep the dashboard usable when the service is unreachable.
+        setInstitutions((institutionSnapshot.data || []).map((item) => ({ id: item.id, name: item.name || '', department: item.department || '', municipality: '', type: item.type || '' })))
+        setProfiles((profileSnapshot.data || []).map((item) => ({ id: item.id, fullName: item.full_name || null, email: '', role: item.role || 'USER', active: item.active !== false })))
+        setDataError('')
+      } catch (cause) {
+        if (!alive) return
+        const code = typeof cause === 'object' && cause && 'code' in cause ? String(cause.code) : ''
+        const detail = cause instanceof Error
+          ? cause.message
+          : typeof cause === 'object' && cause && 'message' in cause
+            ? String(cause.message)
+            : ''
+        if (code === '42501' || code === 'PGRST301' || code === '401') {
+          setDataError('Supabase rechazó la consulta por permisos. Revisa la conexión de Firebase como proveedor externo y las políticas de acceso de las tablas.')
+        } else if (code === '42P01' || code.startsWith('PGRST')) {
+          setDataError(`No se encontró una tabla o columna esperada en Supabase. ${detail}`)
+        } else {
+          setDataError(`No se pudieron cargar los datos de Supabase. ${detail || 'Revisa la conexión y la configuración del proyecto.'}`)
+        }
       } finally {
         if (alive) setLoading(false)
       }
     })()
     return () => { alive = false }
-  }, [db, isAdmin, user.uid])
+  }, [supabase, isAdmin, user.uid])
 
   async function saveActivity() {
     if (!form.name.trim()) return
+    if (!supabase) throw new Error('Supabase no está configurado.')
     const date = parseDate(form.date)
-    const firebaseDate = date ? `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}` : ''
-    const activity = {
-      code: '', responsibleId: user.uid, responsibleName: userName,
-      areaIncidencia: form.area, tipoActividad: form.type, otroTipoActividad: '',
-      nombreActividad: form.name.trim(), fecha: firebaseDate, horaInicio: form.startTime, horaFin: form.endTime,
-      antecedentes: form.background, objetivo: form.objective, descripcion: form.description, evaluacionSeguimiento: form.evaluation,
-      selectedSpaces: [], otherSpace: '', institutions: [],
-      participants: { teachers: 0, studentsF: 0, studentsM: 0, community: 0, artists: 0, totalGeneral: 0 },
-      technicalInfo: { usedEquipment: false, equipment: [], otherEquipment: '', observations: '', failures: '', requiresReview: '' },
-      photoUrls: [], attendanceListUrls: [], otherAnnexUrls: [],
-      status: 'DRAFT', adminObservation: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    }
-    const result = await addDoc(collection(db, 'activities'), activity)
+    const dateValue = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null
+    const { error } = await supabase.from('activities').insert({
+      responsible_id: user.uid, responsible_name: userName,
+      area_incidencia: form.area, tipo_actividad: form.type,
+      nombre_actividad: form.name.trim(), fecha: dateValue, status: 'DRAFT',
+    })
+    if (error) throw error
     setActivities((current) => [{
-      id: result.id, code: '', nombreActividad: activity.nombreActividad,
-      tipoActividad: activity.tipoActividad, areaIncidencia: activity.areaIncidencia,
-      fecha: activity.fecha, responsibleName: userName, horaInicio: activity.horaInicio,
-      horaFin: activity.horaFin, status: 'DRAFT',
+      id: crypto.randomUUID(), code: '', nombreActividad: form.name.trim(),
+      tipoActividad: form.type, areaIncidencia: form.area,
+      fecha: dateValue || '', responsibleName: userName, horaInicio: form.startTime,
+      horaFin: form.endTime, status: 'DRAFT',
     }, ...current])
     setForm({ name: '', type: 'Taller', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', evaluation: '' })
     setShowForm(false)
@@ -214,6 +230,7 @@ function Dashboard() {
           {active === 'Reportes' && <ReportsPage activities={activities} />}
           {active === 'Ajustes' && <SettingsPage userName={userName} email={user.email || ''} isAdmin={isAdmin} onSignOut={signOutUser} />}
         </>}
+        {dataError && <div className="auth-message error" role="alert">{dataError}</div>}
         {showForm && <ActivityForm form={form} setForm={setForm} onClose={() => setShowForm(false)} onSave={saveActivity} />}
       </div>
     </section>

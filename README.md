@@ -14,21 +14,22 @@ Versión web del sistema de control y seguimiento de actividades del Teatro Pabl
 - Descarga de reportes de actividades en formato CSV.
 - Cierre de sesión y navegación adaptable a pantallas pequeñas.
 
-La web lee y guarda actividades, perfiles e instituciones en Firebase/Cloud Firestore, el mismo servicio utilizado por la aplicación Android.
+La aplicación usa Firebase Authentication para iniciar sesión y Supabase para cargar y guardar las actividades, instituciones y perfiles que ya existen en la base de datos web. El perfil de acceso también se valida en Firestore.
 
 ## Requisitos
 
 - Node.js 20 o posterior.
 - `pnpm`.
 - Un proyecto Firebase con Authentication y Cloud Firestore configurados.
+- El proyecto Supabase donde están las tablas de la aplicación web.
 
 ## Preparar Firebase
 
 1. En Firebase Console, abre el proyecto `teatropablotesak-78d51` o el proyecto que corresponda a tu instalación.
-2. En **Configuración del proyecto**, registra una aplicación web y copia su configuración. La aplicación Android no sustituye el registro web: utiliza el `appId` de la aplicación web.
-3. En **Authentication → Método de acceso**, habilita **Correo electrónico/contraseña** y **Google**.
-4. En **Authentication → Configuración → Dominios autorizados**, agrega `localhost` para desarrollo y el dominio donde publicarás la web.
-5. Verifica que Cloud Firestore tenga las reglas de seguridad del proyecto Android. La web crea perfiles de colaborador con rol `USER` y respeta los permisos definidos en Firestore.
+2. En **Authentication → Método de acceso**, habilita **Correo electrónico/contraseña** y **Google**.
+3. En **Authentication → Configuración → Dominios autorizados**, agrega `localhost` para desarrollo y el dominio donde publicarás la web.
+4. En Supabase, abre **Authentication → Sign In / Third-party providers** y registra Firebase como proveedor externo usando el ID del proyecto Firebase.
+5. Asegúrate de que los tokens de Firebase incluyan el claim `role: authenticated` y que las políticas RLS de Supabase permitan a esos usuarios leer o modificar las filas correspondientes. No desactives RLS para resolver errores de permisos.
 
 ## Instalación y ejecución
 
@@ -38,7 +39,7 @@ Instala las dependencias:
 pnpm install
 ```
 
-Crea `.env.local` en la carpeta principal del proyecto y agrega los valores de la aplicación web registrada en Firebase:
+Crea `.env.local` en la carpeta principal del proyecto y agrega la configuración web de Firebase y las credenciales públicas de Supabase:
 
 ```env
 NEXT_PUBLIC_FIREBASE_API_KEY=tu-api-key
@@ -47,9 +48,11 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=tu-proyecto
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=tu-proyecto.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=tu-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=tu-app-id-web
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-clave-publica
 ```
 
-Estas variables corresponden a la configuración pública del cliente web de Firebase. No agregues credenciales de cuentas de servicio ni claves privadas al navegador. `.env.local` está excluido de Git.
+Si el proyecto todavía usa la clave anónima, puedes usar `NEXT_PUBLIC_SUPABASE_ANON_KEY` en lugar de `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Las claves públicas se usan en el navegador y deben estar protegidas por RLS. Nunca agregues una clave `service_role`, una clave secreta de Supabase ni credenciales de cuenta de servicio a variables `NEXT_PUBLIC_`. `.env.local` está excluido de Git.
 
 Inicia el servidor local:
 
