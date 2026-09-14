@@ -14,6 +14,7 @@ const config = {
 }
 
 export const firebaseConfigured = Boolean(config.apiKey && config.authDomain && config.projectId && config.appId)
+export const firebaseWebAppConfigured = Boolean(firebaseConfigured && config.appId?.includes(':web:'))
 
 export function getFirebase() {
   if (!firebaseConfigured) throw new Error('Falta configurar Firebase para la versión web.')

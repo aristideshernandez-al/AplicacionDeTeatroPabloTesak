@@ -26,10 +26,11 @@ La aplicación usa Firebase Authentication para iniciar sesión y Supabase para 
 ## Preparar Firebase
 
 1. En Firebase Console, abre el proyecto `teatropablotesak-78d51` o el proyecto que corresponda a tu instalación.
-2. En **Authentication → Método de acceso**, habilita **Correo electrónico/contraseña** y **Google**.
-3. En **Authentication → Configuración → Dominios autorizados**, agrega `localhost` para desarrollo y el dominio donde publicarás la web.
-4. En Supabase, abre **Authentication → Sign In / Third-party providers** y registra Firebase como proveedor externo usando el ID del proyecto Firebase.
-5. Asegúrate de que los tokens de Firebase incluyan el claim `role: authenticated` y que las políticas RLS de Supabase permitan a esos usuarios leer o modificar las filas correspondientes. No desactives RLS para resolver errores de permisos.
+2. En **Configuración del proyecto → General → Tus apps**, agrega una aplicación **Web**. Copia la configuración de esa aplicación; el valor `appId` debe ser el identificador web (termina en `:web:...`), no el identificador Android.
+3. En **Authentication → Método de acceso**, habilita **Correo electrónico/contraseña** y **Google**.
+4. En **Authentication → Configuración → Dominios autorizados**, agrega `localhost` para desarrollo y el dominio donde publicarás la web.
+5. En Supabase, abre **Authentication → Sign In / Third-party providers** y registra Firebase como proveedor externo usando el ID del proyecto Firebase.
+6. Asegúrate de que los tokens de Firebase incluyan el claim `role: authenticated` y que las políticas RLS de Supabase permitan a esos usuarios leer o modificar las filas correspondientes. No desactives RLS para resolver errores de permisos.
 
 ## Instalación y ejecución
 

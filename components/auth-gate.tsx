@@ -5,6 +5,7 @@ import type { FormEvent, ReactNode } from 'react'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
@@ -12,13 +13,14 @@ import {
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
   type User,
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
 import { ArrowLeft, Eye, EyeOff, LoaderCircle, Mail, Theater } from 'lucide-react'
-import { firebaseConfigured, getFirebase } from '@/lib/firebase/client'
+import { firebaseConfigured, firebaseWebAppConfigured, getFirebase } from '@/lib/firebase/client'
 
 type UserProfile = { uid: string; fullName: string; email: string; role: string; active: boolean; profilePhotoUrl?: string | null }
 type AuthContextValue = { user: User; profile: UserProfile; signOutUser: () => Promise<void> }
@@ -38,7 +40,10 @@ function readableError(error: unknown) {
   if (code.includes('weak-password')) return 'La contraseña debe tener al menos 6 caracteres.'
   if (code.includes('invalid-email')) return 'Escribe un correo electrónico válido.'
   if (code.includes('popup-closed-by-user')) return 'Se cerró la ventana de Google antes de terminar el acceso.'
+  if (code.includes('operation-not-allowed')) return 'El acceso con Google todavía no está habilitado en Firebase Authentication.'
   if (code.includes('unauthorized-domain')) return 'Este dominio todavía no está autorizado en Firebase Authentication.'
+  if (code.includes('popup-blocked') || code.includes('popup-unsupported')) return 'El navegador bloqueó la ventana de Google. Intenta nuevamente para continuar con la redirección.'
+  if (code.includes('web-storage-unsupported')) return 'El navegador bloquea el almacenamiento necesario para iniciar sesión. Habilita las cookies y vuelve a intentarlo.'
   if (code.includes('network-request-failed')) return 'No se pudo conectar con Firebase. Revisa tu conexión e inténtalo de nuevo.'
   return error instanceof Error ? error.message : 'No se pudo completar la solicitud. Inténtalo de nuevo.'
 }
@@ -62,6 +67,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const { auth, db } = getFirebase()
     setPersistence(auth, browserLocalPersistence).then(() => {
       if (disposed) return
+      void getRedirectResult(auth).catch((error: unknown) => setAuthError(readableError(error)))
       unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
         if (!nextUser) {
           setUser(null)
@@ -223,15 +229,30 @@ function AuthScreen({ view, setView, notice, authError, setNotice, setAuthError 
   async function continueWithGoogle() {
     setNotice('')
     setAuthError('')
-    if (!firebaseConfigured) {
-      setAuthError('Falta configurar Firebase para habilitar el acceso con Google. Revisa las instrucciones del README.')
+    if (!firebaseWebAppConfigured) {
+      setAuthError('Firebase todavía no tiene una aplicación web registrada. Registra la aplicación web y reemplaza NEXT_PUBLIC_FIREBASE_APP_ID por su identificador web en la configuración del despliegue.')
       return
     }
     setBusy(true)
     try {
       const provider = new GoogleAuthProvider()
       provider.setCustomParameters({ prompt: 'select_account' })
-      await signInWithPopup(getFirebase().auth, provider)
+      const auth = getFirebase().auth
+      const mobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      if (mobileBrowser) {
+        await signInWithRedirect(auth, provider)
+      } else {
+        try {
+          await signInWithPopup(auth, provider)
+        } catch (error) {
+          const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+          if (code.includes('popup-blocked') || code.includes('popup-unsupported')) {
+            await signInWithRedirect(auth, provider)
+          } else {
+            throw error
+          }
+        }
+      }
     } catch (error) {
       setAuthError(readableError(error))
     } finally {
@@ -256,6 +277,7 @@ function AuthScreen({ view, setView, notice, authError, setNotice, setAuthError 
       {notice && <div className="auth-message success" role="status">{notice}</div>}
       {authError && <div className="auth-message error" role="alert">{authError}</div>}
       {!firebaseConfigured && <div className="auth-message config" role="status">La autenticación web necesita las variables de Firebase. Consulta la sección de configuración del README.</div>}
+      {firebaseConfigured && !firebaseWebAppConfigured && <div className="auth-message config" role="status">Esta configuración corresponde a la aplicación Android. Para iniciar sesión desde la web, registra también la aplicación web en Firebase y actualiza su configuración en el despliegue.</div>}
       <form className="auth-form" onSubmit={submit}>
         {isRegister && <label>Nombre completo<input autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Tu nombre" required disabled={busy} /></label>}
         <label>Correo electrónico<span className="auth-input-wrap"><Mail size={17} /><input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nombre@correo.com" required disabled={busy} /></span></label>
@@ -266,7 +288,7 @@ function AuthScreen({ view, setView, notice, authError, setNotice, setAuthError 
         {isLogin && <button className="forgot-link" type="button" onClick={() => changeView('forgot')} disabled={busy}>¿Olvidaste tu contraseña?</button>}
         <button className="auth-submit" type="submit" disabled={busy || !firebaseConfigured}>{busy ? <><LoaderCircle className="spin" size={18} />Procesando…</> : isLogin ? 'Ingresar' : isRegister ? 'Crear cuenta' : 'Enviar enlace de recuperación'}</button>
       </form>
-      {isLogin && <><div className="auth-divider"><span />o continúa con<span /></div><button className="google-button" onClick={continueWithGoogle} disabled={busy || !firebaseConfigured}><GoogleMark />Continuar con Google</button><p className="auth-switch">¿No tienes cuenta? <button onClick={() => changeView('register')}>Regístrate aquí</button></p><p className="auth-note">Las cuentas nuevas comienzan con permisos de colaborador. La administración de roles se realiza desde el sistema.</p></>}
+      {isLogin && <><div className="auth-divider"><span />o continúa con<span /></div><button className="google-button" onClick={continueWithGoogle} disabled={busy || !firebaseWebAppConfigured}><GoogleMark />Continuar con Google</button><p className="auth-switch">¿No tienes cuenta? <button onClick={() => changeView('register')}>Regístrate aquí</button></p><p className="auth-note">Las cuentas nuevas comienzan con permisos de colaborador. La administración de roles se realiza desde el sistema.</p></>}
       {isRegister && <p className="auth-note">Al registrarte, enviaremos un correo de verificación. Podrás iniciar sesión después de confirmar tu dirección.</p>}
       {view === 'forgot' && <button className="auth-switch auth-switch-button" onClick={() => changeView('login')}>Regresar a iniciar sesión</button>}
     </div></section>
