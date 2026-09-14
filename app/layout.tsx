@@ -3,9 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Clarity — Tu espacio para enfocarte',
-  description: 'Organiza tus tareas, hábitos y notas en un espacio claro.',
-  generator: 'v0.app',
+  title: 'Teatro Pablo Tesak | Gestión de actividades',
+  description: 'Registra, organiza y da seguimiento a las actividades del Teatro Pablo Tesak.',
   icons: {
     icon: [
       {
@@ -26,11 +25,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  colorScheme: 'light',
+  themeColor: '#f8f7fb',
 }
 
 export default function RootLayout({
@@ -39,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body className="antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
