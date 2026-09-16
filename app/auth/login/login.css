@@ -49,3 +49,16 @@
 @media(max-width:680px){.auth-official-logo{display:none}}
 
 .auth-official-logo{border-radius:18px;box-shadow:0 8px 24px #0008}
+
+/* Identidad visual compartida con la aplicación Android. */
+.auth-shell{--auth-green:#6650a4}
+.auth-brand-mark{background:#1a1a1a;border:1px solid #625b71;box-shadow:0 8px 20px #1a1a1a24}
+.auth-brand-mark img{object-fit:contain}
+.auth-visual{background:radial-gradient(ellipse at 52% 48%,#514080 0,#302740 42%,#1a1a1a 82%)}
+.auth-visual:before{background:linear-gradient(120deg,#09080c80,transparent 45%,#17131e55),repeating-linear-gradient(115deg,transparent 0 74px,#ffffff06 75px 76px)}
+.stage-curtain{background:repeating-linear-gradient(90deg,#211d28 0 15px,#30283a 17px 27px,#40334e 30px 33px)}
+.stage-glow{background:radial-gradient(ellipse at 50% 0%,#d4af3742 0,#d4af3718 32%,transparent 72%)}
+.stage-light{background:#f4d77f;box-shadow:0 0 20px 8px #d4af377a}
+.stage-floor{border-top-color:#d4af3755;background:linear-gradient(180deg,#d4af3724,transparent)}
+.stage-orbit{border-color:#d4af3738}.stage-orbit-two{border-color:#d4af3724}
+.auth-visual-copy p{color:#d4af37}.auth-footer-line{background:#d4af3780}
