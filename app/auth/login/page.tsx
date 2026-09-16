@@ -1,20 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Activity, Globe2, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('error') === 'oauth') {
+      setError('No se pudo completar el acceso. Verifica que Google esté habilitado en Supabase y vuelve a intentarlo.')
+    }
+  }, [])
   async function signInWithGoogle() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const redirectTo = process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`
+    const redirect = new URL('/auth/callback', window.location.origin)
+    const next = new URLSearchParams(window.location.search).get('next')
+    if (next?.startsWith('/') && !next.startsWith('//')) redirect.searchParams.set('next', next)
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, queryParams: { access_type: 'offline', prompt: 'select_account' } },
+      options: { redirectTo: redirect.toString(), queryParams: { access_type: 'offline', prompt: 'select_account' } },
     })
     if (authError) { setError('No se pudo iniciar sesión con Google. Intenta nuevamente.'); setLoading(false) }
   }

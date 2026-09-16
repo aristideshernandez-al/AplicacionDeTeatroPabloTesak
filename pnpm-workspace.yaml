@@ -5,5 +5,4 @@ minimumReleaseAgeExclude:
   - next
 
 allowBuilds:
-  '@firebase/util': true
   protobufjs: true
