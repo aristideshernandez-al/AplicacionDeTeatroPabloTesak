@@ -243,24 +243,34 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
     const detailRows = [['Nombre', activity.nombre_actividad], ['Código', activity.code || ''], ['Fecha', formatDate(activity.fecha)], ['Horario', `${activity.hora_inicio || '--:--'} - ${activity.hora_fin || '--:--'}`], ['Área de incidencia', activity.area_incidencia || ''], ['Tipo de actividad', activity.tipo_actividad || activity.otro_tipo_actividad || ''], ['Responsable', activity.responsible_name || ''], ['Instituciones', (activity.institutions || []).map((item) => `${item.name}${item.type ? ` (${item.type})` : ''}`).join('\n')], ['Espacios', [...(activity.selected_spaces || []), activity.other_space || ''].filter(Boolean).join(', ')]]
     const details = [['Antecedentes', activity.antecedentes], ['Objetivo', activity.objetivo], ['Descripción / logística', activity.descripcion], ...(config.options.includeObservations ? [['Evaluación y seguimiento', activity.evaluacion_seguimiento], ['Observaciones técnicas', activity.technical_info?.observations || activity.technical_info?.technicalNotes], ['Observación administrativa', activity.admin_observation]] : [])].filter((row) => Boolean(row[1]?.trim()))
     const inlinePhotos = config.options.includePhotos ? (activity.photo_urls || []).map((url) => safeUrl(url)).filter((url): url is string => Boolean(url)).slice(0, 4) : []
-    const columns = [[], []] as string[][]
     const detailBlocks = details.map(([label, value]) => `<article class="detail-paragraph"><h3>${escapeHtml(label)}</h3><p>${escapeHtml(value)}</p></article>`)
-    const photoPositions = inlinePhotos.map((_, photoIndex) => details.length ? Math.min(details.length - 1, Math.floor(((photoIndex + 1) * details.length) / (inlinePhotos.length + 1))) : -1)
+    const infoRows: string[] = []
+    const textRow = (left: string, right: string) => `<div class="info-row"><div>${left}</div><div>${right}</div></div>`
+    const photoMarkup = (index: number) => `<figure class="photo-inline"><img src="${escapeHtml(inlinePhotos[index])}" alt="Fotografía de evidencia ${index + 1}"></figure>`
     let photoIndex = 0
-    detailBlocks.forEach((block, detailIndex) => {
-      columns[detailIndex % 2].push(block)
-      while (photoIndex < inlinePhotos.length && photoPositions[photoIndex] === detailIndex) {
-        const url = inlinePhotos[photoIndex]
-        columns[photoIndex % 2].push(`<figure class="photo-inline"><img src="${escapeHtml(url)}" alt="Fotografía de evidencia ${photoIndex + 1}"></figure>`)
+    let detailIndex = 0
+    while (detailIndex < detailBlocks.length || photoIndex < inlinePhotos.length) {
+      if (photoIndex < inlinePhotos.length) {
+        const detail = detailBlocks[detailIndex++] || ''
+        const photo = photoMarkup(photoIndex)
+        const photoOnLeft = photoIndex % 2 === 1
+        infoRows.push(photoOnLeft ? textRow(photo, detail) : textRow(detail, photo))
         photoIndex += 1
+
+        const detailsRemaining = detailBlocks.length - detailIndex
+        const photosRemaining = inlinePhotos.length - photoIndex
+        if (photoIndex % 2 === 0 && photosRemaining > 0 && detailsRemaining > photosRemaining) {
+          const leftDetail = detailBlocks[detailIndex++] || ''
+          const rightDetail = detailBlocks[detailIndex++] || ''
+          infoRows.push(textRow(leftDetail, rightDetail))
+        }
+      } else {
+        const leftDetail = detailBlocks[detailIndex++] || ''
+        const rightDetail = detailBlocks[detailIndex++] || ''
+        infoRows.push(textRow(leftDetail, rightDetail))
       }
-    })
-    while (photoIndex < inlinePhotos.length) {
-      columns[photoIndex % 2].push(`<figure class="photo-inline"><img src="${escapeHtml(inlinePhotos[photoIndex])}" alt="Fotografía de evidencia ${photoIndex + 1}"></figure>`)
-      photoIndex += 1
     }
-    const infoRows = Array.from({ length: Math.max(columns[0].length, columns[1].length) }, (_, index) => `<div class="info-row"><div>${columns[0][index] || ''}</div><div>${columns[1][index] || ''}</div></div>`).join('')
-    const infoColumns = infoRows ? `<section class="report-section"><h2>Información de la actividad</h2><div class="info-grid">${infoRows}</div></section>` : ''
+    const infoColumns = infoRows.length ? `<section class="report-section"><h2>Información de la actividad</h2><div class="info-grid">${infoRows.join('')}</div></section>` : ''
     specificSection = `${infoColumns}<section class="report-section"><h2>Detalle de actividad</h2>${table(['Campo', 'Valor'], detailRows.filter((row) => Boolean(row[1]?.trim())))}</section>${config.options.includeParticipants ? `<section class="report-section"><h2>Estadísticas de participación</h2>${table(['Categoría', 'Cantidad'], [['Docentes', String(count(activity.participants?.teachers))], ['Estudiantes femeninos', String(count(activity.participants?.studentsF))], ['Estudiantes masculinos', String(count(activity.participants?.studentsM))], ['Comunidad', String(count(activity.participants?.community))], ['Elenco / Artistas', String(count(activity.participants?.artists))], ['Total general', String(count(activity.participants?.totalGeneral))]])}</section>` : ''}`
   } else if (config.scope === 'BY_INSTITUTION') {
     const grouped: Record<string, ReportActivity[]> = {}; activities.forEach((activity) => (activity.institutions || []).forEach((institution) => { (grouped[institution.name] ||= []).push(activity) }))
