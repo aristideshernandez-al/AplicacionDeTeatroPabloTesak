@@ -100,13 +100,14 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
 
   function openPrintView() {
     if (!canGenerate) return
-    const popup = window.open('', '_blank')
-    if (!popup) return window.alert('Permite las ventanas emergentes para imprimir el reporte.')
-    popup.document.open()
-    popup.document.write(buildReportHtml(config, reportActivities, stats, window.location.origin))
-    popup.document.close()
-    popup.focus()
-      window.setTimeout(() => { if (!popup.closed) popup.print() }, 1200)
+    setPreviewOpen(true)
+  }
+
+  function printReport() {
+    const reportFrame = document.querySelector<HTMLIFrameElement>('.report-preview-window iframe')
+    if (!reportFrame?.contentWindow) return
+    reportFrame.contentWindow.focus()
+    reportFrame.contentWindow.print()
   }
 
   function downloadCsv() {
@@ -137,7 +138,7 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
         <div className="report-actions"><button className="secondary-button" disabled={!canGenerate} onClick={() => setPreviewOpen(true)}><Eye size={16} />Vista previa</button><button className="primary-button" disabled={!canGenerate} onClick={openPrintView}><Printer size={16} />Generar PDF</button><button className="secondary-button" disabled={!canGenerate} onClick={downloadCsv}><Download size={16} />Descargar CSV</button></div><p className="report-print-note">En el cuadro de impresión, selecciona «Guardar como PDF» para descargar el informe.</p>
       </aside>
     </div>
-    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate} onClick={openPrintView}><Printer size={16} />Generar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header><iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin)} /></div></div>}
+    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate} onClick={printReport}><Printer size={16} />Imprimir / guardar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header><iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin)} /></div></div>}
   </section>
 }
 
