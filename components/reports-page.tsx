@@ -229,10 +229,8 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
   const color = /^#[0-9a-f]{6}$/i.test(config.reportColor) ? config.reportColor : '#6650A4'
   const headerColor = /^#[0-9a-f]{6}$/i.test(config.headerTextColor) ? config.headerTextColor : '#FFFFFF'
   const frameColor = /^#[0-9a-f]{6}$/i.test(config.frameColor) ? config.frameColor : '#6650A4'
-  const scope = scopeOptions.find((item) => item.id === config.scope)?.title || 'General'
   const presentation = presentationOptions.find((item) => item.id === config.presentation)?.label || 'Resumen ejecutivo'
   const reportHeading = config.scope === 'INDIVIDUAL' && activities[0] ? activities[0].nombre_actividad : presentation
-  const period = periodOptions.find((item) => item.id === config.period)?.label || 'Mes actual'
   const today = new Intl.DateTimeFormat('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())
   const table = (headers: string[], rows: string[][], className = '') => `<table${className ? ` class="${className}"` : ''}><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell).replaceAll('\n', '<br>')}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}" class="empty-cell">Sin registros para mostrar</td></tr>`}</tbody></table>`
   const summary = `<section class="report-section"><h2>Enfoque del reporte</h2><p>${escapeHtml(presentationOptions.find((item) => item.id === config.presentation)?.description || '')}</p></section>`
@@ -294,7 +292,7 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
   const photosSection = config.scope !== 'INDIVIDUAL' && photos.length ? `<section class="report-section"><h2>Evidencias fotográficas</h2><div class="photo-grid">${photos.map((photo, index) => `<figure class="photo-frame frame-${config.frameStyle.toLowerCase()}" style="--frame-color:${frameColor};--photo-index:${index}"><img src="${escapeHtml(photo.url)}" alt="Fotografía de evidencia ${index + 1}"></figure>`).join('')}</div></section>` : ''
   const annexes = config.options.includeAnnexes ? activities.flatMap((activity) => (activity.other_annex_urls || []).filter((url) => safeUrl(url)).map(() => [activity.nombre_actividad, 'Documento anexo disponible en el expediente de la actividad'])) : []
   const annexSection = annexes.length ? `<section class="report-section"><h2>Documentos anexos</h2>${table(['Actividad', 'Documento'], annexes)}<p class="annex-note">Los archivos anexos no se incorporan a este informe.</p></section>` : ''
-  const attendanceSection = attendancePages.length ? `<section class="attendance-section"><h2>Listas de asistencia</h2>${attendancePages.map((page) => `<div class="attendance-page"><p>${escapeHtml(page.activity)} · Página ${page.pageNumber}</p><img src="${escapeHtml(page.dataUrl)}" alt="Lista de asistencia: ${escapeHtml(page.activity)}, página ${page.pageNumber}"></div>`).join('')}</section>` : ''
+  const attendanceSection = attendancePages.length ? `<section class="attendance-section"><h2>Listas de asistencia</h2>${attendancePages.map((page) => `<div class="attendance-page"><img src="${escapeHtml(page.dataUrl)}" alt="Lista de asistencia de ${escapeHtml(page.activity)}"></div>`).join('')}</section>` : ''
   const headerLogo = origin ? `${origin}/logo-mined.png` : '/logo-mined.png'
   const name = `Reporte_TPT_${new Date().toISOString().slice(0, 10)}`
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(presentation)} - ${escapeHtml(name)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -307,18 +305,17 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
       .detail-paragraph{padding:3mm;border:1px solid #e7e2f0;border-radius:2mm;background:#faf9fc;break-inside:avoid;page-break-inside:avoid}
       .detail-paragraph p{margin:0;overflow-wrap:anywhere}
       .photo-inline{margin:0;break-inside:avoid;page-break-inside:avoid;text-align:center}
-      .photo-inline img{display:block;width:100%;height:auto;max-height:58mm;object-fit:contain}
+      .photo-inline img{display:block;width:100%;height:45mm;object-fit:contain}
       .attendance-section{break-before:page;page-break-before:always;margin:0 0 8mm}
       .attendance-section>h2{margin:0 0 3mm;padding:0 0 2mm;border-bottom:1px solid ${color};color:${color};font-size:12pt;text-transform:uppercase;break-after:avoid}
-      .attendance-page{min-height:190mm;display:flex;flex-direction:column;gap:3mm;break-inside:avoid;page-break-inside:avoid}
+      .attendance-page{min-height:210mm;display:flex;flex-direction:column;gap:3mm;break-inside:avoid;page-break-inside:avoid}
       .attendance-page+.attendance-page{break-before:page;page-break-before:always}
-      .attendance-page>p{margin:0;color:#5d5668;font-size:8pt}
-      .attendance-page>img{display:block;width:auto;height:auto;max-width:100%;max-height:195mm;object-fit:contain;align-self:center;margin:auto}
+      .attendance-page>img{display:block;width:auto;height:auto;max-width:100%;max-height:210mm;object-fit:contain;align-self:center;margin:auto}
       .details-table th:first-child,.details-table td:first-child{width:34%}.details-table th:last-child,.details-table td:last-child{width:66%}
       .participant-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2mm}
       .participant-card{display:flex;align-items:center;justify-content:space-between;gap:2mm;min-height:14mm;padding:2mm 3mm;border:1px solid #e7e2f0;border-radius:2mm;background:#faf9fc;break-inside:avoid;page-break-inside:avoid}
       .participant-card span{font-size:8pt}.participant-card strong{color:${color};font-size:12pt}
       .keep-together{break-inside:avoid;page-break-inside:avoid}
-      @media print{body{width:auto!important;min-height:0!important;margin:0!important;padding:0!important}.page-header{position:fixed!important;top:0!important;left:0!important;right:0!important}.page-footer{position:fixed!important;bottom:7mm!important;left:0!important;right:0!important}main{padding:43mm 14mm 28mm;-webkit-box-decoration-break:clone;box-decoration-break:clone}.attendance-page{min-height:190mm}.attendance-page>img{max-height:195mm}}
-    </style></head><body><header class="page-header"><div class="logo-box"><img src="${escapeHtml(headerLogo)}" alt="Ministerio de Educación de El Salvador"></div><div class="office"><strong>DIRECCIÓN DE ADMINISTRACIÓN Y GESTIÓN TERRITORIAL</strong><span>Teatro del Ministerio de Educación,</span><span>Pablo Tesak</span></div><div class="report-meta"><strong>INFORME</strong><span>${today}</span></div></header><footer class="page-footer"><span>Teatro Pablo Tesak · ${escapeHtml(scope)} · ${escapeHtml(period)}</span><span>${today}</span></footer><main><h1 class="report-title">${escapeHtml(reportHeading)}</h1><p class="summary-line">Tipo: ${escapeHtml(scope)} &nbsp; | &nbsp; Periodo: ${escapeHtml(period)} &nbsp; | &nbsp; Actividades: ${activities.length}</p>${config.options.includeStats && config.scope !== 'INDIVIDUAL' ? statsTable : ''}${config.scope !== 'INDIVIDUAL' ? summary : ''}${specificSection}${activityList}${photosSection}${annexSection}${attendanceSection}</main></body></html>`
+      @media print{body{width:auto!important;min-height:0!important;margin:0!important;padding:0!important}.page-header{position:fixed!important;top:0!important;left:0!important;right:0!important}main{padding:43mm 14mm 16mm;-webkit-box-decoration-break:clone;box-decoration-break:clone}.attendance-page{min-height:210mm}.attendance-page>img{max-height:210mm}}
+    </style></head><body><header class="page-header"><div class="logo-box"><img src="${escapeHtml(headerLogo)}" alt="Ministerio de Educación de El Salvador"></div><div class="office"><strong>DIRECCIÓN DE ADMINISTRACIÓN Y GESTIÓN TERRITORIAL</strong><span>Teatro del Ministerio de Educación,</span><span>Pablo Tesak</span></div><div class="report-meta"><strong>INFORME</strong><span>${today}</span></div></header><main><h1 class="report-title">${escapeHtml(reportHeading)}</h1>${config.options.includeStats && config.scope !== 'INDIVIDUAL' ? statsTable : ''}${config.scope !== 'INDIVIDUAL' ? summary : ''}${specificSection}${activityList}${photosSection}${annexSection}${attendanceSection}</main></body></html>`
 }
