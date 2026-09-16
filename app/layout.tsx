@@ -6,20 +6,7 @@ export const metadata: Metadata = {
   title: 'Teatro Pablo Tesak | Gestión de actividades',
   description: 'Registra, organiza y da seguimiento a las actividades del Teatro Pablo Tesak.',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
+    icon: '/icono-teatro-pablo-tesak.webp',
     apple: '/apple-icon.png',
   },
 }

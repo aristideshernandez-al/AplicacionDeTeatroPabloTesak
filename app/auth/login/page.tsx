@@ -2,7 +2,7 @@
 
 import './login.css'
 import { useEffect, useState } from 'react'
-import { Activity, ArrowUpRight, Loader2, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowUpRight, Loader2, ShieldCheck, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -30,7 +30,7 @@ export default function LoginPage() {
     <main className="auth-shell">
       <section className="auth-panel" aria-labelledby="login-title">
         <a className="auth-brand" href="/" aria-label="Teatro Pablo Tesak, inicio">
-          <span className="auth-brand-mark"><Activity size={20} strokeWidth={2.2} /></span>
+          <span className="auth-brand-mark"><img src="/icono-teatro-pablo-tesak.webp" alt="" /></span>
           <span className="auth-brand-name">Teatro Pablo Tesak</span>
         </a>
 
@@ -54,6 +54,7 @@ export default function LoginPage() {
 
       <aside className="auth-visual" aria-label="Teatro Pablo Tesak, arte y comunidad">
         <div className="auth-visual-top"><span className="auth-visual-icon"><Sparkles size={17} /></span><span>ARTE · CULTURA · COMUNIDAD</span></div>
+        <img className="auth-official-logo" src="/logo-teatro-pablo-tesak.png" alt="Teatro Pablo Tesak" />
         <div className="auth-stage-art" aria-hidden="true">
           <div className="stage-glow" />
           <div className="stage-curtain stage-curtain-left" />
