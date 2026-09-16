@@ -68,7 +68,7 @@ export default function LoginPage() {
           <h2>El arte nos<br />encuentra.</h2>
           <span>Organizamos cada actividad para acercar la cultura a más personas.</span>
         </div>
-        <div className="auth-visual-footer"><span>EL SALVADOR</span><span className="auth-footer-line" /><span>DESDE 2010</span></div>
+        <div className="auth-visual-footer"><span>EL SALVADOR</span><span className="auth-footer-line" /><span>DESDE 2025</span></div>
       </aside>
     </main>
   )

@@ -28,6 +28,10 @@ export default function Page() {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', type: 'Taller', otherType: '', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', followUp: '', spaces: [] as string[], otherSpace: '', institutions: [] as InstitutionSelection[], participants: { teachers: 0, studentsF: 0, studentsM: 0, community: 0, artists: 0, totalGeneral: 0 } as Participants, technicalInfo: { responsibleName: '', responsibleRole: '', technicalNotes: '', methodology: '', evaluationTools: '' } as TechnicalInfo, status: 'DRAFT' as Status })
   const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? null
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get('section')
+    if (nav.some(([label]) => label === section)) setActive(section as string)
+  }, [])
   const emptyForm = () => ({ name: '', type: 'Taller', otherType: '', area: 'Formación artística', date: '', startTime: '', endTime: '', background: '', objective: '', description: '', followUp: '', spaces: [] as string[], otherSpace: '', institutions: [] as InstitutionSelection[], participants: { teachers: 0, studentsF: 0, studentsM: 0, community: 0, artists: 0, totalGeneral: 0 } as Participants, technicalInfo: { responsibleName: '', responsibleRole: '', technicalNotes: '', methodology: '', evaluationTools: '' } as TechnicalInfo, status: 'DRAFT' as Status })
 
   function openCreateForm() {
