@@ -7,6 +7,7 @@ type Scope = 'INDIVIDUAL' | 'GENERAL_PERIODIC' | 'BY_INSTITUTION' | 'STUDENT_GEN
 type Period = 'ACTIVITY' | 'MONTHLY' | 'SPECIFIC_MONTH' | 'SPECIFIC_DATE' | 'TRIMESTRE' | 'SEMESTER' | 'ANNUAL' | 'ALL'
 type Presentation = 'EXECUTIVE_SUMMARY' | 'TECHNICAL_REPORT' | 'INSTITUTIONAL_REPORT' | 'ACTIVITY_MEMORY' | 'STATISTICAL_REPORT'
 type FrameStyle = 'CREATIVE' | 'CLASSIC' | 'ROUNDED' | 'POLAROID' | 'MINIMAL' | 'TAPE'
+type AttendancePage = { activity: string; pageNumber: number; dataUrl: string }
 type ParticipantCounts = { teachers?: number; studentsF?: number; studentsM?: number; community?: number; artists?: number; totalGeneral?: number }
 type ReportActivity = {
   id: string; code?: string | null; nombre_actividad: string; tipo_actividad: string; otro_tipo_actividad?: string | null; area_incidencia?: string | null; fecha?: string | null; hora_inicio?: string | null; hora_fin?: string | null; responsible_name?: string | null; responsible_id?: string | null; antecedentes?: string | null; objetivo?: string | null; descripcion?: string | null; evaluacion_seguimiento?: string | null; admin_observation?: string | null; status: string; selected_spaces?: string[]; other_space?: string | null; institutions?: { name: string; type?: string; department?: string; municipality?: string; district?: string }[]; participants?: ParticipantCounts; technical_info?: { responsibleName?: string; responsibleRole?: string; methodology?: string; technicalNotes?: string; observations?: string }; photo_urls?: string[]; attendance_list_urls?: string[]; other_annex_urls?: string[]
@@ -56,6 +57,9 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
   const [frameColor, setFrameColor] = useState('#6650A4')
   const [frameStyle, setFrameStyle] = useState<FrameStyle>('CREATIVE')
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [attendancePages, setAttendancePages] = useState<AttendancePage[]>([])
+  const [loadingAttendance, setLoadingAttendance] = useState(false)
+  const [attendanceError, setAttendanceError] = useState('')
 
   const choices = useMemo(() => ({
     spaces: distinct(activities.flatMap((activity) => [...(activity.selected_spaces || []), activity.other_space || ''])),
@@ -98,9 +102,27 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
     if (nextScope === 'BY_SPACE') setPresentation('TECHNICAL_REPORT')
   }
 
-  function openPrintView() {
+  async function openPrintView() {
     if (!canGenerate) return
     setPreviewOpen(true)
+    setAttendancePages([])
+    setAttendanceError('')
+    const attachments = options.includeSignatures
+      ? reportActivities.flatMap((activity) => (activity.attendance_list_urls || []).filter((url) => safeUrl(url)).map((url) => ({ url, activity: activity.nombre_actividad })))
+      : []
+    if (!attachments.length) return
+    setLoadingAttendance(true)
+    try {
+      const renderedPages: AttendancePage[] = []
+      for (const attachment of attachments) {
+        renderedPages.push(...await renderAttendanceAttachment(attachment.url, attachment.activity, renderedPages.length))
+      }
+      setAttendancePages(renderedPages)
+    } catch (error) {
+      setAttendanceError(error instanceof Error ? error.message : 'No se pudieron preparar las listas de asistencia.')
+    } finally {
+      setLoadingAttendance(false)
+    }
   }
 
   function printReport() {
@@ -138,8 +160,54 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
         <div className="report-actions"><button className="secondary-button" disabled={!canGenerate} onClick={() => setPreviewOpen(true)}><Eye size={16} />Vista previa</button><button className="primary-button" disabled={!canGenerate} onClick={openPrintView}><Printer size={16} />Generar PDF</button><button className="secondary-button" disabled={!canGenerate} onClick={downloadCsv}><Download size={16} />Descargar CSV</button></div><p className="report-print-note">En el cuadro de impresión, selecciona «Guardar como PDF» para descargar el informe.</p>
       </aside>
     </div>
-    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate} onClick={printReport}><Printer size={16} />Imprimir / guardar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header><iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin)} /></div></div>}
+    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate || loadingAttendance || Boolean(attendanceError)} onClick={printReport}><Printer size={16} />Imprimir / guardar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header>{loadingAttendance && <p className="report-attachment-status" role="status">Cargando e incorporando las páginas de asistencia…</p>}{attendanceError && <p className="report-attachment-error" role="alert">{attendanceError} Cierra esta vista y desmarca «Incluir listas de asistencia» para continuar sin esos documentos.</p>}<iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin, attendancePages)} /></div></div>}
   </section>
+}
+
+async function renderAttendanceAttachment(url: string, activity: string, alreadyRendered: number): Promise<AttendancePage[]> {
+  const response = await fetch(`/api/reportes/adjunto?url=${encodeURIComponent(url)}`, { credentials: 'same-origin', cache: 'no-store' })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(result.error || 'No se pudo descargar la lista de asistencia.')
+  }
+  const contentType = (response.headers.get('content-type') || '').split(';')[0].toLowerCase()
+  const bytes = await response.arrayBuffer()
+
+  if (contentType.startsWith('image/')) {
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: contentType }))
+    const scale = Math.min(1, 2200 / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    return [{ activity, pageNumber: 1, dataUrl: canvas.toDataURL('image/jpeg', 0.9) }]
+  }
+
+  if (contentType !== 'application/pdf') throw new Error('La lista debe ser un PDF o una imagen JPG, PNG o WebP.')
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString()
+  const pdfDocument = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise
+  if (alreadyRendered + pdfDocument.numPages > 30) {
+    await pdfDocument.destroy()
+    throw new Error('El conjunto de listas supera el límite de 30 páginas por informe.')
+  }
+
+  const result: AttendancePage[] = []
+  for (let index = 1; index <= pdfDocument.numPages; index += 1) {
+    const page = await pdfDocument.getPage(index)
+    const viewport = page.getViewport({ scale: 1.45 })
+    const canvas = globalThis.document.createElement('canvas')
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('El navegador no pudo preparar la imagen del documento de asistencia.')
+    await page.render({ canvasContext: context, viewport }).promise
+    result.push({ activity, pageNumber: index, dataUrl: canvas.toDataURL('image/jpeg', 0.9) })
+    page.cleanup()
+  }
+  await pdfDocument.destroy()
+  return result
 }
 
 function ReportSelect({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) { return <label className="report-field">{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option>{allLabel}</option>{values.map((item) => <option key={item}>{item}</option>)}</select></label> }
@@ -157,7 +225,7 @@ function calculateStats(activities: ReportActivity[]) { const institutions = dis
 function escapeHtml(value: unknown) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;') }
 function safeUrl(value: string) { try { const url = new URL(value); return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '' } catch { return '' } }
 
-function buildReportHtml(config: { scope: Scope; presentation: Presentation; period: Period; options: typeof emptyOptions; reportColor: string; headerTextColor: string; frameColor: string; frameStyle: FrameStyle; specificMonth: number; specificYear: number; specificDate: string }, activities: ReportActivity[], stats: ReturnType<typeof calculateStats>, origin: string) {
+function buildReportHtml(config: { scope: Scope; presentation: Presentation; period: Period; options: typeof emptyOptions; reportColor: string; headerTextColor: string; frameColor: string; frameStyle: FrameStyle; specificMonth: number; specificYear: number; specificDate: string }, activities: ReportActivity[], stats: ReturnType<typeof calculateStats>, origin: string, attendancePages: AttendancePage[]) {
   const color = /^#[0-9a-f]{6}$/i.test(config.reportColor) ? config.reportColor : '#6650A4'
   const headerColor = /^#[0-9a-f]{6}$/i.test(config.headerTextColor) ? config.headerTextColor : '#FFFFFF'
   const frameColor = /^#[0-9a-f]{6}$/i.test(config.frameColor) ? config.frameColor : '#6650A4'
@@ -194,11 +262,20 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
   const photosSection = photos.length ? `<section class="report-section"><h2>Evidencias fotográficas</h2><div class="photo-grid">${photos.map((photo, index) => `<figure class="photo-frame frame-${config.frameStyle.toLowerCase()}" style="--frame-color:${frameColor};--photo-index:${index}"><img src="${escapeHtml(photo.url)}" alt="Evidencia ${index + 1} de ${escapeHtml(photo.activity)}"><figcaption>${config.scope === 'INDIVIDUAL' ? `Evidencia fotográfica ${index + 1}` : `${escapeHtml(photo.activity)} · Evidencia ${index + 1}`}</figcaption></figure>`).join('')}</div></section>` : ''
   const annexes = config.options.includeAnnexes ? activities.flatMap((activity) => (activity.other_annex_urls || []).filter((url) => safeUrl(url)).map(() => [activity.nombre_actividad, 'Documento anexo disponible en el expediente de la actividad'])) : []
   const annexSection = annexes.length ? `<section class="report-section"><h2>Documentos anexos</h2>${table(['Actividad', 'Documento'], annexes)}<p class="annex-note">Los archivos anexos no se incorporan a este informe.</p></section>` : ''
-  const attendance = config.options.includeSignatures ? activities.flatMap((activity) => (activity.attendance_list_urls || []).filter((url) => safeUrl(url)).map(() => [activity.nombre_actividad, 'Lista de asistencia disponible en el expediente de la actividad'])) : []
-  const attendanceSection = attendance.length ? `<section class="report-section"><h2>Listas de asistencia y firmas</h2>${table(['Actividad', 'Documento'], attendance)}<p class="annex-note">El archivo de asistencia no se incorpora a este informe. Consulte el expediente de la actividad.</p></section>` : ''
+  const attendanceSection = attendancePages.length ? attendancePages.map((page) => `<section class="attendance-page"><div class="attendance-page-heading"><strong>Lista de asistencia y firmas</strong><span>${escapeHtml(page.activity)} · Página ${page.pageNumber}</span></div><img src="${escapeHtml(page.dataUrl)}" alt="Lista de asistencia: ${escapeHtml(page.activity)}, página ${page.pageNumber}"></section>`).join('') : ''
   const headerLogo = origin ? `${origin}/logo-mined.png` : '/logo-mined.png'
   const name = `Reporte_TPT_${new Date().toISOString().slice(0, 10)}`
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(presentation)} - ${escapeHtml(name)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>
     @page{size:A4;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;padding:43mm 14mm 28mm;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10pt;line-height:1.4}.page-header{position:fixed;top:0;left:0;right:0;height:38mm;background:${color};color:${headerColor};display:grid;grid-template-columns:32% 42% 26%;align-items:center;padding:3mm 8mm;border-bottom:2mm solid ${headerColor}}.logo-box{height:31mm;display:flex;align-items:center;justify-content:center;border-right:1px solid ${headerColor}88;padding-right:5mm}.logo-box img{max-width:42mm;max-height:28mm;object-fit:contain;filter:brightness(0) saturate(100%) invert(100%)}.office{height:28mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-right:1px solid ${headerColor}88;padding:0 3mm;font-size:8pt}.office strong{font-size:9pt}.report-meta{text-align:center;padding-left:3mm;font-size:9pt;font-weight:700}.report-meta strong{display:block;font-size:14pt;margin-bottom:1mm}.page-footer{position:fixed;bottom:7mm;left:14mm;right:14mm;border-top:1px solid ${color};padding-top:2mm;display:flex;justify-content:space-between;color:#5d5668;font-size:8pt}.report-section{margin:0 0 8mm;break-inside:auto}.report-section h2{margin:0 0 3mm;padding:0 0 2mm;border-bottom:1px solid ${color};color:${color};font-size:12pt;text-transform:uppercase;break-after:avoid}.report-section h3{font-size:10pt;margin:0 0 1mm}.report-section p{margin:0 0 3mm;white-space:pre-wrap}.report-section table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.5pt}.report-section th{background:${color};color:${headerColor};text-align:left;font-size:8pt}.report-section th,.report-section td{border:0.5px solid ${color};padding:2mm;vertical-align:top;overflow-wrap:anywhere}.report-section tbody tr:nth-child(odd){background:#f5f5f5}.detail-paragraph{margin:0 0 4mm}.empty-cell{color:#777;text-align:center}.summary-line{font-size:9pt;margin-bottom:5mm}.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:7mm 9mm}.photo-frame{margin:0;padding:3mm;background:${frameColor};border-radius:3mm;break-inside:avoid;box-shadow:0 1mm 2mm #0002;transform:rotate(var(--rotation,0deg))}.photo-frame img{width:100%;height:58mm;object-fit:cover;display:block;background:#eee;border:2mm solid #fff;border-radius:inherit}.photo-frame figcaption{padding:2mm 1mm 0;font-size:8pt}.frame-creative:nth-child(4n+1){--rotation:-2deg}.frame-creative:nth-child(4n+2){--rotation:1.5deg}.frame-tape:nth-child(odd){--rotation:-1deg}.frame-tape:nth-child(even){--rotation:1deg}.frame-rounded,.frame-rounded img{border-radius:7mm}.frame-minimal{background:#fff;border:0.5mm solid ${frameColor};padding:1mm}.frame-classic{border-radius:0}.frame-polaroid{background:#fff;padding:3mm 3mm 8mm;border-radius:1mm}.frame-tape:before{content:'';display:block;position:absolute;top:-2mm;left:40%;width:20%;height:4mm;background:#f5e7beaa}.annex-note{font-size:8pt;color:#625b71;margin-top:2mm}.print-help{position:fixed;right:6mm;bottom:4mm;background:#6650a4;color:white;padding:2mm 4mm;border-radius:2mm;font-size:8pt}.report-title{font-size:13pt;font-weight:700;color:#1a1a1a;margin:0 0 2mm}.hide-print{display:none}@media screen{body{width:210mm;min-height:297mm;margin:12px auto;padding-top:43mm;background:#fff;box-shadow:0 3px 22px #0002}.page-header{position:absolute}.page-footer{position:absolute}.print-help{display:none}}@media print{body{width:auto;min-height:0}.report-section{orphans:3;widows:3}.report-section h2{break-after:avoid}}
+    </style><style>
+      @page{size:A4;margin:42mm 14mm 23mm}
+      .photo-frame{transform:none!important}
+      .photo-frame img{width:100%;height:auto;max-height:58mm;object-fit:contain}
+      .attendance-page{break-before:page;page-break-before:always;break-inside:avoid;page-break-inside:avoid;min-height:225mm;display:flex;flex-direction:column;gap:5mm}
+      .attendance-page:last-child{break-after:auto;page-break-after:auto}
+      .attendance-page-heading{display:grid;gap:1.5mm;border-bottom:1px solid ${color};padding-bottom:2mm;color:${color};font-size:10pt}
+      .attendance-page-heading span{color:#5d5668;font-size:8pt}
+      .attendance-page>img{display:block;width:auto;height:auto;max-width:100%;max-height:218mm;object-fit:contain;align-self:center;margin:auto}
+      @media print{body{width:auto!important;min-height:0!important;margin:0!important;padding:0!important}.page-header{position:fixed!important;top:-40mm!important;left:-14mm!important;right:-14mm!important}.page-footer{position:fixed!important;bottom:-17mm!important;left:0!important;right:0!important}.attendance-page{min-height:220mm}.attendance-page>img{max-height:216mm}}
     </style></head><body><header class="page-header"><div class="logo-box"><img src="${escapeHtml(headerLogo)}" alt="Ministerio de Educación de El Salvador"></div><div class="office"><strong>DIRECCIÓN DE ADMINISTRACIÓN Y GESTIÓN TERRITORIAL</strong><span>Teatro del Ministerio de Educación,</span><span>Pablo Tesak</span></div><div class="report-meta"><strong>INFORME</strong><span>${today}</span></div></header><footer class="page-footer"><span>Teatro Pablo Tesak · ${escapeHtml(scope)} · ${escapeHtml(period)}</span><span>${today}</span></footer><main><h1 class="report-title">${escapeHtml(presentation)}</h1><p class="summary-line">Tipo: ${escapeHtml(scope)} &nbsp; | &nbsp; Periodo: ${escapeHtml(period)} &nbsp; | &nbsp; Actividades: ${activities.length}</p>${config.options.includeStats && config.scope !== 'INDIVIDUAL' ? statsTable : ''}${config.scope !== 'INDIVIDUAL' ? summary : ''}${specificSection}${activityList}${photosSection}${annexSection}${attendanceSection}</main></body></html>`
 }
