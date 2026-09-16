@@ -243,12 +243,25 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
     const detailRows = [['Nombre', activity.nombre_actividad], ['Código', activity.code || ''], ['Fecha', formatDate(activity.fecha)], ['Horario', `${activity.hora_inicio || '--:--'} - ${activity.hora_fin || '--:--'}`], ['Área de incidencia', activity.area_incidencia || ''], ['Tipo de actividad', activity.tipo_actividad || activity.otro_tipo_actividad || ''], ['Responsable', activity.responsible_name || ''], ['Instituciones', (activity.institutions || []).map((item) => `${item.name}${item.type ? ` (${item.type})` : ''}`).join('\n')], ['Espacios', [...(activity.selected_spaces || []), activity.other_space || ''].filter(Boolean).join(', ')]]
     const details = [['Antecedentes', activity.antecedentes], ['Objetivo', activity.objetivo], ['Descripción / logística', activity.descripcion], ...(config.options.includeObservations ? [['Evaluación y seguimiento', activity.evaluacion_seguimiento], ['Observaciones técnicas', activity.technical_info?.observations || activity.technical_info?.technicalNotes], ['Observación administrativa', activity.admin_observation]] : [])].filter((row) => Boolean(row[1]?.trim()))
     const inlinePhotos = config.options.includePhotos ? (activity.photo_urls || []).map((url) => safeUrl(url)).filter((url): url is string => Boolean(url)).slice(0, 4) : []
-    const evidence = (url: string, index: number) => `<figure class="photo-inline"><img src="${escapeHtml(url)}" alt="Evidencia fotográfica ${index + 1} de ${escapeHtml(activity.nombre_actividad)}"><figcaption>Evidencia fotográfica ${index + 1}</figcaption></figure>`
-    const detailContent = details.map(([label, value], detailIndex) => {
-      const photosHere = inlinePhotos.flatMap((url, photoIndex) => Math.min(details.length - 1, Math.floor(((photoIndex + 1) * details.length) / (inlinePhotos.length + 1))) === detailIndex ? [evidence(url, photoIndex)] : [])
-      return `<div class="detail-paragraph"><h3>${escapeHtml(label)}</h3><p>${escapeHtml(value)}</p></div>${photosHere.join('')}`
-    }).join('') + (details.length ? '' : inlinePhotos.map(evidence).join(''))
-    specificSection = `${details.length || inlinePhotos.length ? `<section class="report-section"><h2>Información de la actividad</h2>${detailContent}</section>` : ''}<section class="report-section"><h2>Detalle de actividad</h2>${table(['Campo', 'Valor'], detailRows.filter((row) => Boolean(row[1]?.trim())))}</section>${config.options.includeParticipants ? `<section class="report-section"><h2>Estadísticas de participación</h2>${table(['Categoría', 'Cantidad'], [['Docentes', String(count(activity.participants?.teachers))], ['Estudiantes femeninos', String(count(activity.participants?.studentsF))], ['Estudiantes masculinos', String(count(activity.participants?.studentsM))], ['Comunidad', String(count(activity.participants?.community))], ['Elenco / Artistas', String(count(activity.participants?.artists))], ['Total general', String(count(activity.participants?.totalGeneral))]])}</section>` : ''}`
+    const columns = [[], []] as string[][]
+    const detailBlocks = details.map(([label, value]) => `<article class="detail-paragraph"><h3>${escapeHtml(label)}</h3><p>${escapeHtml(value)}</p></article>`)
+    const photoPositions = inlinePhotos.map((_, photoIndex) => details.length ? Math.min(details.length - 1, Math.floor(((photoIndex + 1) * details.length) / (inlinePhotos.length + 1))) : -1)
+    let photoIndex = 0
+    detailBlocks.forEach((block, detailIndex) => {
+      columns[detailIndex % 2].push(block)
+      while (photoIndex < inlinePhotos.length && photoPositions[photoIndex] === detailIndex) {
+        const url = inlinePhotos[photoIndex]
+        columns[photoIndex % 2].push(`<figure class="photo-inline"><img src="${escapeHtml(url)}" alt="Fotografía de evidencia ${photoIndex + 1}"></figure>`)
+        photoIndex += 1
+      }
+    })
+    while (photoIndex < inlinePhotos.length) {
+      columns[photoIndex % 2].push(`<figure class="photo-inline"><img src="${escapeHtml(inlinePhotos[photoIndex])}" alt="Fotografía de evidencia ${photoIndex + 1}"></figure>`)
+      photoIndex += 1
+    }
+    const infoRows = Array.from({ length: Math.max(columns[0].length, columns[1].length) }, (_, index) => `<div class="info-row"><div>${columns[0][index] || ''}</div><div>${columns[1][index] || ''}</div></div>`).join('')
+    const infoColumns = infoRows ? `<section class="report-section"><h2>Información de la actividad</h2><div class="info-grid">${infoRows}</div></section>` : ''
+    specificSection = `${infoColumns}<section class="report-section"><h2>Detalle de actividad</h2>${table(['Campo', 'Valor'], detailRows.filter((row) => Boolean(row[1]?.trim())))}</section>${config.options.includeParticipants ? `<section class="report-section"><h2>Estadísticas de participación</h2>${table(['Categoría', 'Cantidad'], [['Docentes', String(count(activity.participants?.teachers))], ['Estudiantes femeninos', String(count(activity.participants?.studentsF))], ['Estudiantes masculinos', String(count(activity.participants?.studentsM))], ['Comunidad', String(count(activity.participants?.community))], ['Elenco / Artistas', String(count(activity.participants?.artists))], ['Total general', String(count(activity.participants?.totalGeneral))]])}</section>` : ''}`
   } else if (config.scope === 'BY_INSTITUTION') {
     const grouped: Record<string, ReportActivity[]> = {}; activities.forEach((activity) => (activity.institutions || []).forEach((institution) => { (grouped[institution.name] ||= []).push(activity) }))
     const rows = Object.entries(grouped).map(([name, group]) => [name, String(new Set(group.map((item) => item.id)).size), String(group.reduce((sum, item) => sum + count(item.participants?.totalGeneral), 0)), distinct(group.flatMap((item) => [...(item.selected_spaces || []), item.other_space || ''])).join(', ')])
@@ -265,10 +278,10 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
   }
   const activityList = config.scope !== 'INDIVIDUAL' ? `<section class="report-section"><h2>Listado de actividades</h2>${table(['Fecha', 'Actividad', 'Institución', 'Espacio', 'Participantes'], activities.map((activity) => [formatDate(activity.fecha), activity.nombre_actividad, (activity.institutions || []).map((item) => item.name).join(', '), [...(activity.selected_spaces || []), activity.other_space || ''].filter(Boolean).join(', '), String(count(activity.participants?.totalGeneral))]))}</section>` : ''
   const photos = config.options.includePhotos ? activities.flatMap((activity) => (activity.photo_urls || []).filter((url) => safeUrl(url)).slice(0, 4).map((url) => ({ activity: activity.nombre_actividad, url: safeUrl(url) }))).slice(0, 20) : []
-  const photosSection = config.scope !== 'INDIVIDUAL' && photos.length ? `<section class="report-section"><h2>Evidencias fotográficas</h2><div class="photo-grid">${photos.map((photo, index) => `<figure class="photo-frame frame-${config.frameStyle.toLowerCase()}" style="--frame-color:${frameColor};--photo-index:${index}"><img src="${escapeHtml(photo.url)}" alt="Evidencia ${index + 1} de ${escapeHtml(photo.activity)}"><figcaption>${escapeHtml(photo.activity)} · Evidencia ${index + 1}</figcaption></figure>`).join('')}</div></section>` : ''
+  const photosSection = config.scope !== 'INDIVIDUAL' && photos.length ? `<section class="report-section"><h2>Evidencias fotográficas</h2><div class="photo-grid">${photos.map((photo, index) => `<figure class="photo-frame frame-${config.frameStyle.toLowerCase()}" style="--frame-color:${frameColor};--photo-index:${index}"><img src="${escapeHtml(photo.url)}" alt="Fotografía de evidencia ${index + 1}"></figure>`).join('')}</div></section>` : ''
   const annexes = config.options.includeAnnexes ? activities.flatMap((activity) => (activity.other_annex_urls || []).filter((url) => safeUrl(url)).map(() => [activity.nombre_actividad, 'Documento anexo disponible en el expediente de la actividad'])) : []
   const annexSection = annexes.length ? `<section class="report-section"><h2>Documentos anexos</h2>${table(['Actividad', 'Documento'], annexes)}<p class="annex-note">Los archivos anexos no se incorporan a este informe.</p></section>` : ''
-  const attendanceSection = attendancePages.length ? attendancePages.map((page) => `<section class="attendance-page"><div class="attendance-page-heading"><strong>Lista de asistencia y firmas</strong><span>${escapeHtml(page.activity)} · Página ${page.pageNumber}</span></div><img src="${escapeHtml(page.dataUrl)}" alt="Lista de asistencia: ${escapeHtml(page.activity)}, página ${page.pageNumber}"></section>`).join('') : ''
+  const attendanceSection = attendancePages.length ? `<section class="attendance-section"><h2>Listas de asistencia</h2>${attendancePages.map((page) => `<div class="attendance-page"><p>${escapeHtml(page.activity)} · Página ${page.pageNumber}</p><img src="${escapeHtml(page.dataUrl)}" alt="Lista de asistencia: ${escapeHtml(page.activity)}, página ${page.pageNumber}"></div>`).join('')}</section>` : ''
   const headerLogo = origin ? `${origin}/logo-mined.png` : '/logo-mined.png'
   const name = `Reporte_TPT_${new Date().toISOString().slice(0, 10)}`
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(presentation)} - ${escapeHtml(name)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -276,10 +289,17 @@ function buildReportHtml(config: { scope: Scope; presentation: Presentation; per
     </style><style>
       .photo-frame{transform:none!important}
       .photo-frame img{width:100%;height:auto;max-height:58mm;object-fit:contain}
-      .attendance-page{break-before:page;page-break-before:always;break-inside:avoid;page-break-inside:avoid;min-height:220mm;display:flex;flex-direction:column;gap:5mm}
-      .attendance-page:last-child{break-after:auto;page-break-after:auto}
-      .attendance-page-heading{display:grid;gap:1.5mm;border-bottom:1px solid ${color};padding-bottom:2mm;color:${color};font-size:10pt}
-      .attendance-page-heading span{color:#5d5668;font-size:8pt}
+      .info-grid{display:block}
+      .info-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7mm;margin-bottom:4mm;break-inside:avoid;page-break-inside:avoid}
+      .detail-paragraph{padding:3mm;border:1px solid #e7e2f0;border-radius:2mm;background:#faf9fc;break-inside:avoid;page-break-inside:avoid}
+      .detail-paragraph p{margin:0;overflow-wrap:anywhere}
+      .photo-inline{margin:0;break-inside:avoid;page-break-inside:avoid;text-align:center}
+      .photo-inline img{display:block;width:100%;height:auto;max-height:58mm;object-fit:contain}
+      .attendance-section{break-before:page;page-break-before:always;margin:0 0 8mm}
+      .attendance-section>h2{margin:0 0 3mm;padding:0 0 2mm;border-bottom:1px solid ${color};color:${color};font-size:12pt;text-transform:uppercase;break-after:avoid}
+      .attendance-page{min-height:220mm;display:flex;flex-direction:column;gap:3mm;break-inside:avoid;page-break-inside:avoid}
+      .attendance-page+.attendance-page{break-before:page;page-break-before:always}
+      .attendance-page>p{margin:0;color:#5d5668;font-size:8pt}
       .attendance-page>img{display:block;width:auto;height:auto;max-width:100%;max-height:195mm;object-fit:contain;align-self:center;margin:auto}
       @media print{body{width:auto!important;min-height:0!important;margin:0!important;padding:0!important}.page-header{position:fixed!important;top:0!important;left:0!important;right:0!important}.page-footer{position:fixed!important;bottom:7mm!important;left:0!important;right:0!important}main{padding:43mm 14mm 28mm;-webkit-box-decoration-break:clone;box-decoration-break:clone}.attendance-page{min-height:220mm}.attendance-page>img{max-height:195mm}}
     </style></head><body><header class="page-header"><div class="logo-box"><img src="${escapeHtml(headerLogo)}" alt="Ministerio de Educación de El Salvador"></div><div class="office"><strong>DIRECCIÓN DE ADMINISTRACIÓN Y GESTIÓN TERRITORIAL</strong><span>Teatro del Ministerio de Educación,</span><span>Pablo Tesak</span></div><div class="report-meta"><strong>INFORME</strong><span>${today}</span></div></header><footer class="page-footer"><span>Teatro Pablo Tesak · ${escapeHtml(scope)} · ${escapeHtml(period)}</span><span>${today}</span></footer><main><h1 class="report-title">${escapeHtml(presentation)}</h1><p class="summary-line">Tipo: ${escapeHtml(scope)} &nbsp; | &nbsp; Periodo: ${escapeHtml(period)} &nbsp; | &nbsp; Actividades: ${activities.length}</p>${config.options.includeStats && config.scope !== 'INDIVIDUAL' ? statsTable : ''}${config.scope !== 'INDIVIDUAL' ? summary : ''}${specificSection}${activityList}${photosSection}${annexSection}${attendanceSection}</main></body></html>`
