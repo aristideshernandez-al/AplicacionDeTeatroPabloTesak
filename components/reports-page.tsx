@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { BarChart3, Building2, CalendarDays, CheckCircle2, Clock3, Download, Eye, FileBarChart, FileText, Filter, Image as ImageIcon, List, MapPin, Palette, Printer, RotateCcw, Users, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 type Scope = 'INDIVIDUAL' | 'GENERAL_PERIODIC' | 'BY_INSTITUTION' | 'STUDENT_GENDER' | 'BY_SPACE' | 'STATISTICAL'
 type Period = 'ACTIVITY' | 'MONTHLY' | 'SPECIFIC_MONTH' | 'SPECIFIC_DATE' | 'TRIMESTRE' | 'SEMESTER' | 'ANNUAL' | 'ALL'
@@ -43,6 +44,7 @@ const statusDetails: Record<string, string> = { APPROVED: 'Aprobada', SUBMITTED:
 const emptyOptions = { includePhotos: true, includeSignatures: true, includeAnnexes: true, includeObservations: true, includeStats: true, includeParticipants: true }
 
 export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
+  const supabase = useMemo(() => createClient(), [])
   const [scope, setScope] = useState<Scope>('GENERAL_PERIODIC')
   const [presentation, setPresentation] = useState<Presentation>('EXECUTIVE_SUMMARY')
   const [period, setPeriod] = useState<Period>('MONTHLY')
@@ -58,6 +60,7 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
   const [frameStyle, setFrameStyle] = useState<FrameStyle>('CREATIVE')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [attendancePages, setAttendancePages] = useState<AttendancePage[]>([])
+  const [previewActivities, setPreviewActivities] = useState<ReportActivity[]>([])
   const [loadingAttendance, setLoadingAttendance] = useState(false)
   const [attendanceError, setAttendanceError] = useState('')
 
@@ -107,12 +110,23 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
     setPreviewOpen(true)
     setAttendancePages([])
     setAttendanceError('')
-    const attachments = options.includeSignatures
-      ? reportActivities.flatMap((activity) => (activity.attendance_list_urls || []).filter((url) => safeUrl(url)).map((url) => ({ url, activity: activity.nombre_actividad })))
-      : []
-    if (!attachments.length) return
     setLoadingAttendance(true)
     try {
+      const resolveFiles = async (files: string[] = []) => Promise.all(files.map(async (file) => {
+        if (safeUrl(file)) return file
+        const { data, error } = await supabase.storage.from('activity-attachments').createSignedUrl(file, 3600)
+        if (error || !data?.signedUrl) throw new Error(`No se pudo abrir un archivo adjunto: ${error?.message || 'enlace no disponible'}`)
+        return data.signedUrl
+      }))
+      const preparedActivities = await Promise.all(reportActivities.map(async (activity) => ({
+        ...activity,
+        photo_urls: options.includePhotos ? await resolveFiles(activity.photo_urls) : activity.photo_urls,
+        attendance_list_urls: options.includeSignatures ? await resolveFiles(activity.attendance_list_urls) : activity.attendance_list_urls,
+      })))
+      setPreviewActivities(preparedActivities)
+      const attachments = options.includeSignatures
+        ? preparedActivities.flatMap((activity) => (activity.attendance_list_urls || []).filter((url) => safeUrl(url)).map((url) => ({ url, activity: activity.nombre_actividad })))
+        : []
       const renderedPages: AttendancePage[] = []
       for (const attachment of attachments) {
         renderedPages.push(...await renderAttendanceAttachment(attachment.url, attachment.activity, renderedPages.length))
@@ -160,7 +174,7 @@ export function ReportsPage({ activities }: { activities: ReportActivity[] }) {
         <div className="report-actions"><button className="secondary-button" disabled={!canGenerate} onClick={() => setPreviewOpen(true)}><Eye size={16} />Vista previa</button><button className="primary-button" disabled={!canGenerate} onClick={openPrintView}><Printer size={16} />Generar PDF</button><button className="secondary-button" disabled={!canGenerate} onClick={downloadCsv}><Download size={16} />Descargar CSV</button></div><p className="report-print-note">En el cuadro de impresión, selecciona «Guardar como PDF» para descargar el informe.</p>
       </aside>
     </div>
-    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate || loadingAttendance || Boolean(attendanceError)} onClick={printReport}><Printer size={16} />Imprimir / guardar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header>{loadingAttendance && <p className="report-attachment-status" role="status">Cargando e incorporando las páginas de asistencia…</p>}{attendanceError && <p className="report-attachment-error" role="alert">{attendanceError} Cierra esta vista y desmarca «Incluir listas de asistencia» para continuar sin esos documentos.</p>}<iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin, attendancePages)} /></div></div>}
+    {previewOpen && <div className="report-preview-backdrop" role="dialog" aria-modal="true" aria-label="Vista previa del informe"><div className="report-preview-window"><header><div><strong>Vista previa del PDF</strong><span>{reportActivities.length} actividades · {presentationInfo.label}</span></div><div><button className="primary-button" disabled={!canGenerate || loadingAttendance || Boolean(attendanceError)} onClick={printReport}><Printer size={16} />Imprimir / guardar PDF</button><button className="icon-button" onClick={() => setPreviewOpen(false)} aria-label="Cerrar vista previa"><X size={19} /></button></div></header>{loadingAttendance && <p className="report-attachment-status" role="status">Preparando fotografías y listas de asistencia…</p>}{attendanceError && <p className="report-attachment-error" role="alert">{attendanceError} Cierra esta vista y desmarca «Incluir listas de asistencia» para continuar sin esos documentos.</p>}<iframe title="Vista previa del informe" srcDoc={buildReportHtml(config, previewActivities.length ? previewActivities : reportActivities, stats, typeof window === 'undefined' ? '' : window.location.origin, attendancePages)} /></div></div>}
   </section>
 }
 
