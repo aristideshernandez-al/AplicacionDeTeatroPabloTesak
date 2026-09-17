@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Camera, FileText, ImagePlus, LoaderCircle, Trash2, Upload } from 'lucide-react'
+import { Camera, Download, FileText, ImagePlus, LoaderCircle, Trash2, Upload } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -130,7 +130,7 @@ export function ActivityAttachments({ value, onChange, activityId, onCreateActiv
   }
 
   const scannerQr = nativeScannerUri && <div className="scanner-qr-card"><QRCodeSVG value={nativeScannerUri} size={190} level="M" marginSize={2} title="Código QR para abrir la aplicación Escáner Teatro" /><div><strong>Escáner Teatro Pablo Tesak</strong><p>Escanea con un teléfono Android que tenga instalada la aplicación. Se abrirá el escáner de documentos de Google y el PDF se subirá directamente a Supabase.</p><a href={activityId ? `/activities/${encodeURIComponent(activityId)}/upload` : undefined} target="_blank" rel="noreferrer">Usar el escáner web si no tienes la aplicación</a></div></div>
-  const scanAction = showPhoneQr && <div className="scanner-actions"><button type="button" className="phone-qr-toggle" disabled={creatingQr} onClick={toggleScannerQr}>{creatingQr ? 'Preparando escáner…' : qrOpen ? 'Ocultar QR' : nativeScannerUri ? 'Mostrar QR del escáner Android' : activityId ? 'Generar QR para Escáner Teatro' : 'Crear borrador y generar QR'}</button>{qrOpen && scannerQr}</div>
+  const scanAction = showPhoneQr && <div className="scanner-actions"><a className="scanner-app-download" href="/descargas/escaner-teatro-pablo-tesak.apk" download><Download size={15} />Descargar app Android</a><button type="button" className="phone-qr-toggle" disabled={creatingQr} onClick={toggleScannerQr}>{creatingQr ? 'Preparando escáner…' : qrOpen ? 'Ocultar QR' : nativeScannerUri ? 'Mostrar QR del escáner Android' : activityId ? 'Generar QR para Escáner Teatro' : 'Crear borrador y generar QR'}</button>{qrOpen && scannerQr}<small>Instala la aplicación en el teléfono antes de escanear el QR.</small></div>
 
   return <section className={`activity-attachments form-wide ${scannerOnly ? 'scanner-only' : ''}`} id="activity-attachments" aria-label={scannerOnly ? 'Escanear y subir documento' : 'Fotografías y documentos'}>
     {!scannerOnly && <div className="attachments-intro"><div><strong>Fotografías y documentos</strong><span>Sube fotos desde tu computadora o escanea un documento con el teléfono.</span></div></div>}
