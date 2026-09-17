@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 
 const BUCKET = 'activity-attachments'
 const MAX_FILE_SIZE = 20 * 1024 * 1024
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_PUBLIC_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 export type ActivityAttachmentsValue = {
   photos: string[]
@@ -22,6 +24,7 @@ export function ActivityAttachments({ value, onChange, activityId, onCreateActiv
   const [message, setMessage] = useState('')
   const [qrOpen, setQrOpen] = useState(false)
   const [creatingQr, setCreatingQr] = useState(false)
+  const [nativeScannerUri, setNativeScannerUri] = useState('')
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const previewSignature = `${value.photos.join('|')}::${value.documents.join('|')}`
 
@@ -100,10 +103,34 @@ export function ActivityAttachments({ value, onChange, activityId, onCreateActiv
     catch { return 'Archivo adjunto' }
   }
 
-  const phoneUploadUrl = activityId && typeof window !== 'undefined' ? `${window.location.origin}/activities/${encodeURIComponent(activityId)}/upload` : ''
+  async function toggleScannerQr() {
+    if (qrOpen) { setQrOpen(false); return }
+    if (nativeScannerUri) { setQrOpen(true); return }
+    setCreatingQr(true)
+    setMessage('')
+    try {
+      let targetActivityId = activityId || null
+      if (!targetActivityId && onCreateActivity) targetActivityId = await onCreateActivity()
+      if (!targetActivityId) throw new Error('No se pudo preparar la actividad. Escribe el nombre antes de generar el QR.')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Inicia sesión para preparar el escaneo.')
+      if (!SUPABASE_URL || !SUPABASE_PUBLIC_KEY) throw new Error('Falta la configuración pública de Supabase.')
+      const path = `${user.id}/${crypto.randomUUID()}-escaneo.pdf`
+      const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
+      if (error || !data?.signedUrl || !data.token) throw new Error(error?.message || 'No se pudo autorizar la carga segura.')
+      onChange({ ...value, documents: Array.from(new Set([...value.documents, path])) })
+      const link = new URL('teatrotesakscanner://scan')
+      link.searchParams.set('uploadUrl', data.signedUrl)
+      link.searchParams.set('apiKey', SUPABASE_PUBLIC_KEY)
+      setNativeScannerUri(link.toString())
+      setQrOpen(true)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo preparar el QR del escáner.')
+    } finally { setCreatingQr(false) }
+  }
 
-  const scannerQr = showPhoneQr && activityId && phoneUploadUrl && <div className="scanner-qr-card"><QRCodeSVG value={phoneUploadUrl} size={150} level="M" marginSize={2} title="Código QR para escanear un documento con el teléfono" /><p>Escanea este QR con el teléfono. La página abrirá solo la carga de documentos de esta actividad.</p></div>
-  const scanAction = showPhoneQr && <div className="scanner-actions">{activityId ? <button type="button" className="phone-qr-toggle" onClick={() => setQrOpen((visible) => !visible)}>{qrOpen ? 'Ocultar QR' : 'Generar QR para escanear con el teléfono'}</button> : onCreateActivity ? <button type="button" className="phone-qr-toggle" disabled={creatingQr} onClick={async () => { setCreatingQr(true); const id = await onCreateActivity(); setCreatingQr(false); if (id) setQrOpen(true) }}>{creatingQr ? 'Preparando actividad…' : 'Crear borrador y generar QR'}</button> : <small>Guarda la actividad para generar el QR de escaneo.</small>}{qrOpen && scannerQr}</div>
+  const scannerQr = nativeScannerUri && <div className="scanner-qr-card"><QRCodeSVG value={nativeScannerUri} size={190} level="M" marginSize={2} title="Código QR para abrir la aplicación Escáner Teatro" /><div><strong>Escáner Teatro Pablo Tesak</strong><p>Escanea con un teléfono Android que tenga instalada la aplicación. Se abrirá el escáner de documentos de Google y el PDF se subirá directamente a Supabase.</p><a href={activityId ? `/activities/${encodeURIComponent(activityId)}/upload` : undefined} target="_blank" rel="noreferrer">Usar el escáner web si no tienes la aplicación</a></div></div>
+  const scanAction = showPhoneQr && <div className="scanner-actions"><button type="button" className="phone-qr-toggle" disabled={creatingQr} onClick={toggleScannerQr}>{creatingQr ? 'Preparando escáner…' : qrOpen ? 'Ocultar QR' : nativeScannerUri ? 'Mostrar QR del escáner Android' : activityId ? 'Generar QR para Escáner Teatro' : 'Crear borrador y generar QR'}</button>{qrOpen && scannerQr}</div>
 
   return <section className={`activity-attachments form-wide ${scannerOnly ? 'scanner-only' : ''}`} id="activity-attachments" aria-label={scannerOnly ? 'Escanear y subir documento' : 'Fotografías y documentos'}>
     {!scannerOnly && <div className="attachments-intro"><div><strong>Fotografías y documentos</strong><span>Sube fotos desde tu computadora o escanea un documento con el teléfono.</span></div></div>}
