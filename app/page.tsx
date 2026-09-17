@@ -60,6 +60,17 @@ export default function Page() {
 
   useEffect(() => { let alive = true; (async () => { const { data: { user } } = await supabase.auth.getUser(); if (!alive) return; let admin = false; if (user) { const profile = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(); if (!alive) return; const identity = getActivityTechnicalIdentity(user, profile.data?.role); setActivityIdentity(identity); setUserName(identity.responsibleName); admin = profile.data?.role === 'ADMIN'; setIsAdmin(admin) } const [activityResult, institutionResult, profileResult] = await Promise.all([supabase.from('activities').select('id,code,responsible_id,nombre_actividad,tipo_actividad,otro_tipo_actividad,area_incidencia,fecha,hora_inicio,hora_fin,responsible_name,antecedentes,objetivo,descripcion,evaluacion_seguimiento,selected_spaces,other_space,institutions,participants,technical_info,photo_urls,attendance_list_urls,other_annex_urls,admin_observation,status,created_at,updated_at').order('created_at', { ascending: false }).limit(100), supabase.from('activity_institutions').select('id,name,department,type').order('name'), admin ? supabase.from('profiles').select('id,full_name,role,active').order('full_name') : Promise.resolve({ data: [] as ProfileRow[] })]); if (!alive) return; if (activityResult.data) setActivities(activityResult.data as ActivityRow[]); if (institutionResult.error) setInstitutionError('No fue posible cargar el catálogo. Verifica tu sesión y los permisos de lectura de activity_institutions.'); else if (institutionResult.data) setInstitutions(institutionResult.data as InstitutionRow[]); if (profileResult.data) setProfiles(profileResult.data as ProfileRow[]); setLoading(false) })(); return () => { alive = false } }, [supabase])
 
+  useEffect(() => {
+    if (!editingId) return
+    const refreshAttachments = async () => {
+      const { data } = await supabase.from('activities').select('photo_urls,attendance_list_urls,other_annex_urls').eq('id', editingId).maybeSingle()
+      if (!data) return
+      setForm((current) => ({ ...current, photoUrls: Array.from(new Set([...current.photoUrls, ...(data.photo_urls || [])])), attendanceUrls: Array.from(new Set([...current.attendanceUrls, ...(data.attendance_list_urls || [])])), annexUrls: Array.from(new Set([...current.annexUrls, ...(data.other_annex_urls || [])])) }))
+    }
+    window.addEventListener('focus', refreshAttachments)
+    return () => window.removeEventListener('focus', refreshAttachments)
+  }, [editingId, supabase])
+
   async function signOut() { await supabase.auth.signOut(); window.location.href = '/auth/login' }
 
   async function saveActivity() {

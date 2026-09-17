@@ -16,11 +16,11 @@ export type ActivityAttachmentsValue = {
 
 type Category = keyof ActivityAttachmentsValue
 
-export function ActivityAttachments({ value, onChange, activityId }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string }) {
+export function ActivityAttachments({ value, onChange, activityId, showPhoneQr = true }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string; showPhoneQr?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
   const [uploading, setUploading] = useState<Category | null>(null)
   const [message, setMessage] = useState('')
-  const [showPhoneQr, setShowPhoneQr] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
 
   async function uploadFiles(category: Category, files: File[] | null) {
     if (!files?.length) return
@@ -86,11 +86,11 @@ export function ActivityAttachments({ value, onChange, activityId }: { value: Ac
     catch { return 'Archivo adjunto' }
   }
 
-  const phoneUploadUrl = activityId && typeof window !== 'undefined' ? `${window.location.origin}/activities/${encodeURIComponent(activityId)}/edit#activity-attachments` : ''
+  const phoneUploadUrl = activityId && typeof window !== 'undefined' ? `${window.location.origin}/activities/${encodeURIComponent(activityId)}/upload` : ''
 
   return <section className="activity-attachments form-wide" id="activity-attachments" aria-label="Fotografías y documentos">
-    <div className="attachments-intro"><div><strong>Fotografías y documentos</strong><span>Escanea con la cámara del dispositivo o selecciona archivos.</span></div>{activityId ? <button type="button" className="phone-qr-toggle" onClick={() => setShowPhoneQr((visible) => !visible)}>{showPhoneQr ? 'Ocultar QR' : 'Vincular teléfono con QR'}</button> : <small>Guarda la actividad para vincular el teléfono con un QR.</small>}</div>
-    {showPhoneQr && phoneUploadUrl && <div className="phone-qr-card"><QRCodeSVG value={phoneUploadUrl} size={176} level="M" marginSize={2} title="Código QR para abrir la actividad en el teléfono" /><div><strong>Abre esta actividad en el teléfono</strong><p>Escanea el QR e inicia sesión. En Google Drive, toca <b>Cámara</b> para escanear y guardar el documento como PDF. Luego vuelve aquí y súbelo en «Listas de asistencia».</p><a href="https://drive.google.com/drive/" target="_blank" rel="noreferrer">Abrir Google Drive</a></div></div>}
+    <div className="attachments-intro"><div><strong>Fotografías y documentos</strong><span>Escanea con la cámara del dispositivo o selecciona archivos.</span></div><div className="attachments-actions">{showPhoneQr && activityId && <button type="button" className="phone-qr-toggle" onClick={() => setQrOpen((visible) => !visible)}>{qrOpen ? 'Ocultar QR' : 'Vincular teléfono con QR'}</button>}{showPhoneQr && !activityId && <small>Guarda la actividad para vincular el teléfono con un QR.</small>}<a className="drive-shortcut" href="https://drive.google.com/drive/" target="_blank" rel="noreferrer">Abrir Google Drive</a></div></div>
+    {qrOpen && phoneUploadUrl && <div className="phone-qr-card"><QRCodeSVG value={phoneUploadUrl} size={176} level="M" marginSize={2} title="Código QR para abrir la página de carga en el teléfono" /><div><strong>Conecta el teléfono para subir archivos</strong><p>Escanea el QR, inicia sesión si se solicita y abre Google Drive para escanear el documento. Regresa a la página que abrió el QR, elige el PDF escaneado y pulsa «Guardar archivos».</p><a href="https://drive.google.com/drive/" target="_blank" rel="noreferrer">Abrir Google Drive</a></div></div>}
     <div className="upload-groups">
       <UploadGroup title="Fotos de evidencia" icon={<ImagePlus size={17} />} urls={value.photos} busy={Boolean(uploading)} accept="image/*" capture="environment" buttonLabel="Tomar o subir fotos" onFiles={(files) => uploadFiles('photos', files)} onRemove={(url) => removeFile('photos', url)} onOpen={openFile} fileName={fileName} />
       <UploadGroup title="Listas de asistencia" icon={<FileText size={17} />} urls={value.attendance} busy={Boolean(uploading)} accept="application/pdf" buttonLabel="Subir listas en PDF" onFiles={(files) => uploadFiles('attendance', files)} onRemove={(url) => removeFile('attendance', url)} onOpen={openFile} fileName={fileName} />

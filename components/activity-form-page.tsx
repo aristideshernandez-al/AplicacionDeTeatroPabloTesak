@@ -115,6 +115,21 @@ export function ActivityFormPage({ activityId }: { activityId?: string }) {
     })
     return () => { alive = false }
   }, [activityId, supabase])
+  useEffect(() => {
+    if (!activityId) return
+    const refreshAttachments = async () => {
+      const { data } = await supabase.from('activities').select('photo_urls,attendance_list_urls,other_annex_urls').eq('id', activityId).maybeSingle()
+      if (!data) return
+      setForm((current) => ({
+        ...current,
+        photoUrls: Array.from(new Set([...current.photoUrls, ...(data.photo_urls || [])])),
+        attendanceUrls: Array.from(new Set([...current.attendanceUrls, ...(data.attendance_list_urls || [])])),
+        annexUrls: Array.from(new Set([...current.annexUrls, ...(data.other_annex_urls || [])])),
+      }))
+    }
+    window.addEventListener('focus', refreshAttachments)
+    return () => window.removeEventListener('focus', refreshAttachments)
+  }, [activityId, supabase])
   function update(key: string, value: any) { setForm((current) => ({ ...current, [key]: value })) }
   async function save() { if (!form.name.trim()) { setMessage('El nombre de la actividad es obligatorio.'); return } setSaving(true); setMessage(''); const { data: { user } } = await supabase.auth.getUser(); if (!user) { setMessage('Debes iniciar sesión para guardar.'); setSaving(false); return } const { data: profile } = editing ? { data: null } : await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(); const technicalIdentity = editing ? { responsibleName: form.technicalName, responsibleRole: form.technicalRole } : getActivityTechnicalIdentity(user, profile?.role); const participants = { teachers: form.teachers, studentsF: form.studentsF, studentsM: form.studentsM, community: form.community, artists: form.artists, totalGeneral: form.teachers + form.studentsF + form.studentsM + form.community + form.artists }; const payload = { responsible_id: user.id, responsible_name: userName, nombre_actividad: form.name.trim(), tipo_actividad: form.type, otro_tipo_actividad: form.otherType, area_incidencia: form.area, fecha: form.date || null, hora_inicio: form.startTime || null, hora_fin: form.endTime || null, antecedentes: form.background, objetivo: form.objective, descripcion: form.description, evaluacion_seguimiento: form.followUp, selected_spaces: form.spaces, other_space: form.otherSpace, institutions: form.institutions.filter((institution) => form.institutionIds.includes(institution.id)), participants, technical_info: { responsibleName: technicalIdentity.responsibleName, responsibleRole: technicalIdentity.responsibleRole, methodology: form.methodology, technicalNotes: form.technicalNotes }, photo_urls: form.photoUrls, attendance_list_urls: form.attendanceUrls, other_annex_urls: form.annexUrls, status: form.status }; const result = editing ? await supabase.from('activities').update(payload).eq('id', activityId) : await supabase.from('activities').insert(payload); setSaving(false); if (result.error) { setMessage(result.error.message); return } window.location.href = '/?section=Actividades' }
   const selectedInstitutions = institutions.filter((institution) => form.institutionIds.includes(institution.id))
