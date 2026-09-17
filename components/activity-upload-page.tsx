@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, FileUp, LoaderCircle, ShieldCheck } from 'lucide-react'
+import { Camera, CheckCircle2, FileUp, LoaderCircle, ShieldCheck, Trash2, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { ActivityAttachments, type ActivityAttachmentsValue } from '@/components/activity-attachments'
+import { type ActivityAttachmentsValue } from '@/components/activity-attachments'
 
 type ActivityUploadRecord = { nombre_actividad: string; photo_urls: string[] | null; attendance_list_urls: string[] | null; other_annex_urls: string[] | null }
 
@@ -12,10 +12,49 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
   const [activityName, setActivityName] = useState('')
   const [attachments, setAttachments] = useState<ActivityAttachmentsValue>({ photos: [], attendance: [], documents: [] })
   const [baseline, setBaseline] = useState<ActivityAttachmentsValue>({ photos: [], attendance: [], documents: [] })
+  const [scanFiles, setScanFiles] = useState<File[]>([])
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  const [cameraReady, setCameraReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (!cameraOpen) return
+    let stream: MediaStream | null = null
+    let cancelled = false
+    const video = document.querySelector<HTMLVideoElement>('#document-scanner-video')
+    setCameraReady(false)
+    setCameraError('')
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Este navegador no permite abrir la cámara. Usa HTTPS o selecciona el documento escaneado.')
+      return
+    }
+    void navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false }).then((openedStream) => {
+      if (cancelled) { openedStream.getTracks().forEach((track) => track.stop()); return }
+      stream = openedStream
+      if (video) { video.srcObject = openedStream; void video.play().then(() => setCameraReady(true)).catch(() => setCameraError('No se pudo iniciar la vista de cámara.')) }
+    }).catch(() => setCameraError('No se pudo acceder a la cámara. Permite el acceso en el navegador e inténtalo otra vez.'))
+    return () => { cancelled = true; stream?.getTracks().forEach((track) => track.stop()) }
+  }, [cameraOpen])
+
+  function capturePage() {
+    const video = document.querySelector<HTMLVideoElement>('#document-scanner-video')
+    if (!video || !video.videoWidth) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob((blob) => {
+      if (!blob) { setCameraError('No se pudo preparar la imagen. Inténtalo de nuevo.'); return }
+      setScanFiles((current) => [...current, new File([blob], `escaneo-${Date.now()}.jpg`, { type: 'image/jpeg' })])
+      setSaved(false)
+    }, 'image/jpeg', 0.92)
+  }
 
   useEffect(() => {
     let active = true
@@ -50,21 +89,46 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     setSaving(true)
     setError('')
     setSaved(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); setError('Tu sesión terminó. Inicia sesión otra vez para subir el documento.'); return }
+    const uploadedPaths: string[] = []
+    for (const file of scanFiles) {
+      if (file.size > 20 * 1024 * 1024) {
+        if (uploadedPaths.length) await supabase.storage.from('activity-attachments').remove(uploadedPaths)
+        setSaving(false)
+        setError(`${file.name} supera el límite de 20 MB.`)
+        return
+      }
+      const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${user.id}/${crypto.randomUUID()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('activity-attachments').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+      if (uploadError) {
+        if (uploadedPaths.length) await supabase.storage.from('activity-attachments').remove(uploadedPaths)
+        setSaving(false)
+        setError(`No se pudo subir ${file.name}: ${uploadError.message}`)
+        return
+      }
+      uploadedPaths.push(path)
+    }
+    const documents = [...attachments.documents, ...uploadedPaths]
     const { error: updateError } = await supabase.from('activities').update({
       photo_urls: attachments.photos,
       attendance_list_urls: attachments.attendance,
-      other_annex_urls: attachments.documents,
+      other_annex_urls: documents,
     }).eq('id', activityId)
     setSaving(false)
     if (updateError) {
+      if (uploadedPaths.length) await supabase.storage.from('activity-attachments').remove(uploadedPaths)
       setError(`No se guardaron los archivos: ${updateError.message}`)
       return
     }
-    setBaseline(attachments)
+    setAttachments((current) => ({ ...current, documents }))
+    setBaseline((current) => ({ ...current, documents }))
+    setScanFiles([])
     setSaved(true)
   }
 
-  const hasChanges = JSON.stringify(attachments.documents) !== JSON.stringify(baseline.documents)
+  const hasChanges = scanFiles.length > 0 || JSON.stringify(attachments.documents) !== JSON.stringify(baseline.documents)
 
   if (loading) return <main className="mobile-upload-shell"><div className="mobile-upload-card upload-loading"><LoaderCircle className="upload-spinner" size={22} /><span>Abriendo la página de carga…</span></div></main>
 
@@ -72,12 +136,15 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     <div className="mobile-upload-card">
       <header className="mobile-upload-header"><img src="/logo-teatro-pablo-tesak.png" alt="Teatro Pablo Tesak" /><span><ShieldCheck size={15} /> Carga segura de archivos</span></header>
       {error && !activityName ? <div className="mobile-upload-error" role="alert"><h1>No se pudo abrir la actividad</h1><p>{error}</p><a href="/">Ir al inicio</a></div> : <>
-        <div className="mobile-upload-title"><p>ESCANEAR DOCUMENTO</p><h1>{activityName || 'Actividad'}</h1><span>Escanea con Google Drive y vuelve aquí para subir el documento a esta actividad.</span></div>
-        <ol className="drive-scan-steps"><li>Abre Google Drive y toca <b>Cámara</b> para escanear.</li><li>Guarda el escaneo como PDF.</li><li>Vuelve a esta página, selecciona el PDF y pulsa «Terminar y subir documento».</li></ol>
-        <a className="mobile-drive-link" href="https://drive.google.com/drive/" target="_blank" rel="noreferrer"><FileUp size={17} />Abrir Google Drive</a>
-        <ActivityAttachments showPhoneQr={false} scannerOnly value={attachments} onChange={(next) => { setAttachments(next); setSaved(false) }} />
+        <div className="mobile-upload-title"><p>ESCANEAR DOCUMENTO</p><h1>{activityName || 'Actividad'}</h1><span>Usa la cámara de esta página para escanear las páginas. Al terminar, se guardarán directamente en esta actividad.</span></div>
+        <section className="phone-scanner" aria-label="Escáner de documentos">
+          {cameraOpen ? <div className="phone-camera-panel"><video id="document-scanner-video" autoPlay playsInline muted aria-label="Vista de la cámara para escanear" />{cameraError && <p className="mobile-upload-error" role="alert">{cameraError}</p>}<div className="camera-controls"><button className="primary-button" type="button" onClick={capturePage} disabled={!cameraReady}><Camera size={17} />Capturar página</button><button className="secondary-button" type="button" onClick={() => setCameraOpen(false)}><X size={17} />Cerrar cámara</button></div><small>Coloca el documento sobre una superficie plana, encuádralo y captura cada página.</small></div> : <button className="primary-button scanner-start" type="button" onClick={() => setCameraOpen(true)}><Camera size={17} />Abrir escáner con la cámara</button>}
+          <label className="upload-button phone-file-picker"><FileUp size={16} />Seleccionar un escaneo o PDF<input type="file" accept="image/*,.pdf" multiple onChange={(event) => { if (event.currentTarget.files) setScanFiles((current) => [...current, ...Array.from(event.currentTarget.files || [])]); event.currentTarget.value = ''; setSaved(false) }} /></label>
+          {scanFiles.length > 0 && <ul className="phone-scan-list">{scanFiles.map((file, index) => <li key={`${file.name}-${index}`}><span>{file.name}</span><button type="button" onClick={() => setScanFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Quitar ${file.name}`}><Trash2 size={15} /></button></li>)}</ul>}
+          {attachments.documents.length > 0 && <p className="existing-scans">Documentos guardados: {attachments.documents.length}. El nuevo escaneo se añadirá a esta actividad.</p>}
+        </section>
         {error && <p className="mobile-upload-error" role="alert">{error}</p>}
-        {saved && <p className="mobile-upload-success" role="status"><CheckCircle2 size={17} />Documento subido correctamente. Ya puedes cerrar esta página; también aparecerá en la actividad abierta en la computadora.</p>}
+        {saved && <p className="mobile-upload-success" role="status"><CheckCircle2 size={17} />Documento subido a Supabase y guardado en esta actividad. Ya puedes cerrar esta página.</p>}
         <div className="mobile-upload-actions"><a href={`/activities/${encodeURIComponent(activityId)}/edit`}>Volver a la actividad</a><button className="primary-button" type="button" onClick={saveAttachments} disabled={saving || !hasChanges}><FileUp size={16} />{saving ? 'Subiendo…' : 'Terminar y subir documento'}</button></div>
       </>}
     </div>
