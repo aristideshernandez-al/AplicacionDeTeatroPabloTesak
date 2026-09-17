@@ -7,8 +7,9 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isLogin = path === '/auth/login'
   const isCallback = path === '/auth/callback'
+  const isPublicPage = path === '/privacidad'
 
-  if (!user && !isLogin && !isCallback) {
+  if (!user && !isLogin && !isCallback && !isPublicPage) {
     const loginUrl = new URL('/auth/login', request.url)
     loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`)
     const redirect = NextResponse.redirect(loginUrl)
