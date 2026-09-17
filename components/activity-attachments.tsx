@@ -119,6 +119,7 @@ export function ActivityAttachments({ value, onChange, activityId, showPhoneQr =
       const link = new URL('teatrotesakscanner://scan')
       link.searchParams.set('uploadUrl', data.signedUrl)
       link.searchParams.set('apiKey', SUPABASE_PUBLIC_KEY)
+      link.searchParams.set('userId', user.id)
       setNativeScannerUri(link.toString())
       setQrOpen(true)
       if (!activityId) setMessage('QR listo. Al terminar el escaneo, guarda la actividad para conservar el documento adjunto.')
