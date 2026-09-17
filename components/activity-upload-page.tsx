@@ -13,7 +13,7 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
   const [attachments, setAttachments] = useState<ActivityAttachmentsValue>({ photos: [], attendance: [], documents: [] })
   const [baseline, setBaseline] = useState<ActivityAttachmentsValue>({ photos: [], attendance: [], documents: [] })
   const [scanFiles, setScanFiles] = useState<File[]>([])
-  const [cameraOpen, setCameraOpen] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(true)
   const [cameraError, setCameraError] = useState('')
   const [cameraReady, setCameraReady] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -22,7 +22,7 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (!cameraOpen) return
+    if (!cameraOpen || loading || !activityName) return
     let stream: MediaStream | null = null
     let cancelled = false
     const video = document.querySelector<HTMLVideoElement>('#document-scanner-video')
@@ -38,7 +38,7 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
       if (video) { video.srcObject = openedStream; void video.play().then(() => setCameraReady(true)).catch(() => setCameraError('No se pudo iniciar la vista de cámara.')) }
     }).catch(() => setCameraError('No se pudo acceder a la cámara. Permite el acceso en el navegador e inténtalo otra vez.'))
     return () => { cancelled = true; stream?.getTracks().forEach((track) => track.stop()) }
-  }, [cameraOpen])
+  }, [cameraOpen, loading, activityName])
 
   function capturePage() {
     const video = document.querySelector<HTMLVideoElement>('#document-scanner-video')
@@ -136,7 +136,7 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     <div className="mobile-upload-card">
       <header className="mobile-upload-header"><img src="/logo-teatro-pablo-tesak.png" alt="Teatro Pablo Tesak" /><span><ShieldCheck size={15} /> Carga segura de archivos</span></header>
       {error && !activityName ? <div className="mobile-upload-error" role="alert"><h1>No se pudo abrir la actividad</h1><p>{error}</p><a href="/">Ir al inicio</a></div> : <>
-        <div className="mobile-upload-title"><p>ESCANEAR DOCUMENTO</p><h1>{activityName || 'Actividad'}</h1><span>Usa la cámara de esta página para escanear las páginas. Al terminar, se guardarán directamente en esta actividad.</span></div>
+        <div className="mobile-upload-title"><p>ESCÁNER DE DOCUMENTOS</p><h1>{activityName || 'Actividad'}</h1><span>Permite el acceso a la cámara para escanear aquí mismo. Captura cada página y súbelas directamente a esta actividad.</span></div>
         <section className="phone-scanner" aria-label="Escáner de documentos">
           {cameraOpen ? <div className="phone-camera-panel"><video id="document-scanner-video" autoPlay playsInline muted aria-label="Vista de la cámara para escanear" />{cameraError && <p className="mobile-upload-error" role="alert">{cameraError}</p>}<div className="camera-controls"><button className="primary-button" type="button" onClick={capturePage} disabled={!cameraReady}><Camera size={17} />Capturar página</button><button className="secondary-button" type="button" onClick={() => setCameraOpen(false)}><X size={17} />Cerrar cámara</button></div><small>Coloca el documento sobre una superficie plana, encuádralo y captura cada página.</small></div> : <button className="primary-button scanner-start" type="button" onClick={() => setCameraOpen(true)}><Camera size={17} />Abrir escáner con la cámara</button>}
           <label className="upload-button phone-file-picker"><FileUp size={16} />Seleccionar un escaneo o PDF<input type="file" accept="image/*,.pdf" multiple onChange={(event) => { if (event.currentTarget.files) setScanFiles((current) => [...current, ...Array.from(event.currentTarget.files || [])]); event.currentTarget.value = ''; setSaved(false) }} /></label>
