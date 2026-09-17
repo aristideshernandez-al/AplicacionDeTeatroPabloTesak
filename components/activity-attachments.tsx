@@ -16,11 +16,12 @@ export type ActivityAttachmentsValue = {
 
 type Category = keyof ActivityAttachmentsValue
 
-export function ActivityAttachments({ value, onChange, activityId, showPhoneQr = true, scannerOnly = false }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string; showPhoneQr?: boolean; scannerOnly?: boolean }) {
+export function ActivityAttachments({ value, onChange, activityId, onCreateActivity, showPhoneQr = true, scannerOnly = false }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string; onCreateActivity?: () => Promise<string | null>; showPhoneQr?: boolean; scannerOnly?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
   const [uploading, setUploading] = useState<Category | null>(null)
   const [message, setMessage] = useState('')
   const [qrOpen, setQrOpen] = useState(false)
+  const [creatingQr, setCreatingQr] = useState(false)
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const previewSignature = `${value.photos.join('|')}::${value.documents.join('|')}`
 
@@ -102,7 +103,7 @@ export function ActivityAttachments({ value, onChange, activityId, showPhoneQr =
   const phoneUploadUrl = activityId && typeof window !== 'undefined' ? `${window.location.origin}/activities/${encodeURIComponent(activityId)}/upload` : ''
 
   const scannerQr = showPhoneQr && activityId && phoneUploadUrl && <div className="scanner-qr-card"><QRCodeSVG value={phoneUploadUrl} size={150} level="M" marginSize={2} title="Código QR para escanear un documento con el teléfono" /><p>Escanea este QR con el teléfono. La página abrirá solo la carga de documentos de esta actividad.</p></div>
-  const scanAction = showPhoneQr && <div className="scanner-actions">{activityId ? <button type="button" className="phone-qr-toggle" onClick={() => setQrOpen((visible) => !visible)}>{qrOpen ? 'Ocultar QR' : 'Generar QR para escanear con el teléfono'}</button> : <small>Guarda la actividad para generar el QR de escaneo.</small>}{qrOpen && scannerQr}</div>
+  const scanAction = showPhoneQr && <div className="scanner-actions">{activityId ? <button type="button" className="phone-qr-toggle" onClick={() => setQrOpen((visible) => !visible)}>{qrOpen ? 'Ocultar QR' : 'Generar QR para escanear con el teléfono'}</button> : onCreateActivity ? <button type="button" className="phone-qr-toggle" disabled={creatingQr} onClick={async () => { setCreatingQr(true); const id = await onCreateActivity(); setCreatingQr(false); if (id) setQrOpen(true) }}>{creatingQr ? 'Preparando actividad…' : 'Crear borrador y generar QR'}</button> : <small>Guarda la actividad para generar el QR de escaneo.</small>}{qrOpen && scannerQr}</div>
 
   return <section className={`activity-attachments form-wide ${scannerOnly ? 'scanner-only' : ''}`} id="activity-attachments" aria-label={scannerOnly ? 'Escanear y subir documento' : 'Fotografías y documentos'}>
     {!scannerOnly && <div className="attachments-intro"><div><strong>Fotografías y documentos</strong><span>Sube fotos desde tu computadora o escanea un documento con el teléfono.</span></div></div>}
