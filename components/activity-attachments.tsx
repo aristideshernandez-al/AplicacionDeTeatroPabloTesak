@@ -18,7 +18,7 @@ export type ActivityAttachmentsValue = {
 
 type Category = keyof ActivityAttachmentsValue
 
-export function ActivityAttachments({ value, onChange, activityId, onCreateActivity, showPhoneQr = true, scannerOnly = false }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string; onCreateActivity?: () => Promise<string | null>; showPhoneQr?: boolean; scannerOnly?: boolean }) {
+export function ActivityAttachments({ value, onChange, activityId, showPhoneQr = true, scannerOnly = false }: { value: ActivityAttachmentsValue; onChange: (value: ActivityAttachmentsValue) => void; activityId?: string; showPhoneQr?: boolean; scannerOnly?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
   const [uploading, setUploading] = useState<Category | null>(null)
   const [message, setMessage] = useState('')
@@ -109,21 +109,19 @@ export function ActivityAttachments({ value, onChange, activityId, onCreateActiv
     setCreatingQr(true)
     setMessage('')
     try {
-      let targetActivityId = activityId || null
-      if (!targetActivityId && onCreateActivity) targetActivityId = await onCreateActivity()
-      if (!targetActivityId) throw new Error('No se pudo preparar la actividad. Escribe el nombre antes de generar el QR.')
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Inicia sesión para preparar el escaneo.')
       if (!SUPABASE_URL || !SUPABASE_PUBLIC_KEY) throw new Error('Falta la configuración pública de Supabase.')
       const path = `${user.id}/${crypto.randomUUID()}-escaneo.pdf`
       const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
-      if (error || !data?.signedUrl || !data.token) throw new Error(error?.message || 'No se pudo autorizar la carga segura.')
+      if (error || !data?.signedUrl || !data.token) throw new Error(error ? `Supabase no autorizó la carga del documento: ${error.message}` : 'Supabase no devolvió un permiso de carga válido.')
       onChange({ ...value, documents: Array.from(new Set([...value.documents, path])) })
       const link = new URL('teatrotesakscanner://scan')
       link.searchParams.set('uploadUrl', data.signedUrl)
       link.searchParams.set('apiKey', SUPABASE_PUBLIC_KEY)
       setNativeScannerUri(link.toString())
       setQrOpen(true)
+      if (!activityId) setMessage('QR listo. Al terminar el escaneo, guarda la actividad para conservar el documento adjunto.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo preparar el QR del escáner.')
     } finally { setCreatingQr(false) }
