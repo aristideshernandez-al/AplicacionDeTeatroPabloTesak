@@ -7,6 +7,103 @@ import { type ActivityAttachmentsValue } from '@/components/activity-attachments
 
 type ActivityUploadRecord = { nombre_actividad: string; photo_urls: string[] | null; attendance_list_urls: string[] | null; other_annex_urls: string[] | null }
 
+let openCvPromise: Promise<any> | null = null
+
+async function loadOpenCv() {
+  if (!openCvPromise) openCvPromise = new Promise((resolve, reject) => {
+    const finish = async () => {
+      try {
+        let cv: any = (window as any).cv
+        if (typeof cv === 'function') cv = await cv()
+        else if (cv instanceof Promise) cv = await cv
+        if (!cv?.Mat) throw new Error('No se pudo iniciar el escáner.')
+        ;(window as any).cv = cv
+        resolve(cv)
+      } catch (error) { reject(error) }
+    }
+    if ((window as any).cv) { void finish(); return }
+    const script = document.createElement('script')
+    script.src = '/vendor/opencv.js'
+    script.async = true
+    script.onload = () => { void finish() }
+    script.onerror = () => reject(new Error('No se pudo cargar el escáner del navegador.'))
+    document.head.appendChild(script)
+  })
+  return openCvPromise
+}
+
+async function correctDocumentPhoto(canvas: HTMLCanvasElement, blackAndWhite: boolean): Promise<{ blob: Blob; corrected: boolean }> {
+  const cv = await loadOpenCv()
+  const source = cv.imread(canvas)
+  const gray = new cv.Mat()
+  const blurred = new cv.Mat()
+  const edges = new cv.Mat()
+  const contours = new cv.MatVector()
+  const hierarchy = new cv.Mat()
+  let contour: any = null
+  let approximation: any = null
+  let transform: any = null
+  let warped: any = null
+  let processed: any = null
+  let grayOutput: any = null
+  try {
+    cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY)
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0)
+    cv.Canny(blurred, edges, 60, 180)
+    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+    const candidates: Array<{ area: number; corners: Array<{ x: number; y: number }> }> = []
+    for (let i = 0; i < contours.size(); i += 1) {
+      contour = contours.get(i)
+      const area = cv.contourArea(contour)
+      if (area < source.cols * source.rows * 0.12) { contour.delete(); contour = null; continue }
+      approximation = new cv.Mat()
+      cv.approxPolyDP(contour, approximation, 0.02 * cv.arcLength(contour, true), true)
+      if (approximation.rows === 4) {
+        const corners = Array.from({ length: 4 }, (_, index) => ({ x: approximation.intAt(index, 0), y: approximation.intAt(index, 1) }))
+        candidates.push({ area, corners })
+      }
+      approximation.delete(); approximation = null
+      contour.delete(); contour = null
+    }
+    if (!candidates.length) {
+      const raw = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('No se pudo preparar la imagen.')), 'image/jpeg', 0.94))
+      return { blob: raw, corrected: false }
+    }
+    const points = candidates.sort((a, b) => b.area - a.area)[0].corners
+    const bySum = [...points].sort((a, b) => a.x + a.y - (b.x + b.y))
+    const byDiff = [...points].sort((a, b) => a.x - a.y - (b.x - b.y))
+    const [topLeft, bottomRight] = [bySum[0], bySum[3]]
+    const topRight = byDiff[3]
+    const bottomLeft = byDiff[0]
+    const width = Math.max(Math.hypot(topRight.x - topLeft.x, topRight.y - topLeft.y), Math.hypot(bottomRight.x - bottomLeft.x, bottomRight.y - bottomLeft.y))
+    const height = Math.max(Math.hypot(bottomLeft.x - topLeft.x, bottomLeft.y - topLeft.y), Math.hypot(bottomRight.x - topRight.x, bottomRight.y - topRight.y))
+    if (!width || !height || !Number.isFinite(width + height)) {
+      const raw = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('No se pudo preparar la imagen.')), 'image/jpeg', 0.94))
+      return { blob: raw, corrected: false }
+    }
+    const sourcePoints = cv.matFromArray(4, 1, cv.CV_32FC2, [topLeft.x, topLeft.y, topRight.x, topRight.y, bottomRight.x, bottomRight.y, bottomLeft.x, bottomLeft.y])
+    const destinationPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height])
+    transform = cv.getPerspectiveTransform(sourcePoints, destinationPoints)
+    warped = new cv.Mat()
+    cv.warpPerspective(source, warped, transform, new cv.Size(Math.round(width), Math.round(height)), cv.INTER_CUBIC, cv.BORDER_REPLICATE, new cv.Scalar())
+    sourcePoints.delete(); destinationPoints.delete()
+    if (blackAndWhite) {
+      grayOutput = new cv.Mat()
+      processed = new cv.Mat()
+      cv.cvtColor(warped, grayOutput, cv.COLOR_RGBA2GRAY)
+      cv.adaptiveThreshold(grayOutput, processed, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 21, 12)
+    } else processed = warped
+    const output = document.createElement('canvas')
+    cv.imshow(output, processed)
+    const blob = await new Promise<Blob>((resolve, reject) => output.toBlob((value) => value ? resolve(value) : reject(new Error('No se pudo preparar la imagen corregida.')), 'image/jpeg', 0.94))
+    return { blob, corrected: true }
+  } finally {
+    source.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete()
+    contour?.delete(); approximation?.delete(); transform?.delete(); warped?.delete(); grayOutput?.delete()
+    if (processed && processed !== warped) processed.delete()
+  }
+}
+
 export function ActivityUploadPage({ activityId }: { activityId: string }) {
   const supabase = useMemo(() => createClient(), [])
   const [activityName, setActivityName] = useState('')
@@ -16,6 +113,9 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
   const [cameraOpen, setCameraOpen] = useState(true)
   const [cameraError, setCameraError] = useState('')
   const [cameraReady, setCameraReady] = useState(false)
+  const [processingScan, setProcessingScan] = useState(false)
+  const [scanNotice, setScanNotice] = useState('')
+  const [blackAndWhite, setBlackAndWhite] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -40,7 +140,7 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     return () => { cancelled = true; stream?.getTracks().forEach((track) => track.stop()) }
   }, [cameraOpen, loading, activityName])
 
-  function capturePage() {
+  async function capturePage() {
     const video = document.querySelector<HTMLVideoElement>('#document-scanner-video')
     if (!video || !video.videoWidth) return
     const canvas = document.createElement('canvas')
@@ -49,11 +149,22 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     const context = canvas.getContext('2d')
     if (!context) return
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
-    canvas.toBlob((blob) => {
-      if (!blob) { setCameraError('No se pudo preparar la imagen. Inténtalo de nuevo.'); return }
-      setScanFiles((current) => [...current, new File([blob], `escaneo-${Date.now()}.jpg`, { type: 'image/jpeg' })])
+    setProcessingScan(true)
+    setScanNotice('Detectando y recortando el documento…')
+    try {
+      const result = await correctDocumentPhoto(canvas, blackAndWhite)
+      setScanFiles((current) => [...current, new File([result.blob], `escaneo-${Date.now()}.jpg`, { type: 'image/jpeg' })])
+      setScanNotice(result.corrected ? 'Página detectada, enderezada y añadida al escaneo.' : 'No se detectaron los bordes. Se añadió la imagen completa; puedes volver a capturarla con más contraste.')
       setSaved(false)
-    }, 'image/jpeg', 0.92)
+    } catch {
+      canvas.toBlob((blob) => {
+        if (blob) setScanFiles((current) => [...current, new File([blob], `escaneo-${Date.now()}.jpg`, { type: 'image/jpeg' })])
+        setScanNotice('No se pudo aplicar el recorte automático; se añadió la imagen original.')
+        setSaved(false)
+      }, 'image/jpeg', 0.92)
+    } finally {
+      setProcessingScan(false)
+    }
   }
 
   useEffect(() => {
@@ -136,9 +247,17 @@ export function ActivityUploadPage({ activityId }: { activityId: string }) {
     <div className="mobile-upload-card">
       <header className="mobile-upload-header"><img src="/logo-teatro-pablo-tesak.png" alt="Teatro Pablo Tesak" /><span><ShieldCheck size={15} /> Carga segura de archivos</span></header>
       {error && !activityName ? <div className="mobile-upload-error" role="alert"><h1>No se pudo abrir la actividad</h1><p>{error}</p><a href="/">Ir al inicio</a></div> : <>
-        <div className="mobile-upload-title"><p>ESCÁNER DE DOCUMENTOS</p><h1>{activityName || 'Actividad'}</h1><span>Permite el acceso a la cámara para escanear aquí mismo. Captura cada página y súbelas directamente a esta actividad.</span></div>
+        <div className="mobile-upload-title"><p>ESCÁNER DE DOCUMENTOS</p><h1>{activityName || 'Actividad'}</h1><span>Detecta los bordes, endereza y mejora cada página aquí mismo. El archivo se sube directamente a esta actividad.</span></div>
         <section className="phone-scanner" aria-label="Escáner de documentos">
-          {cameraOpen ? <div className="phone-camera-panel"><video id="document-scanner-video" autoPlay playsInline muted aria-label="Vista de la cámara para escanear" />{cameraError && <p className="mobile-upload-error" role="alert">{cameraError}</p>}<div className="camera-controls"><button className="primary-button" type="button" onClick={capturePage} disabled={!cameraReady}><Camera size={17} />Capturar página</button><button className="secondary-button" type="button" onClick={() => setCameraOpen(false)}><X size={17} />Cerrar cámara</button></div><small>Coloca el documento sobre una superficie plana, encuádralo y captura cada página.</small></div> : <button className="primary-button scanner-start" type="button" onClick={() => setCameraOpen(true)}><Camera size={17} />Abrir escáner con la cámara</button>}
+          {cameraOpen ? <div className="phone-camera-panel">
+            <video id="document-scanner-video" autoPlay playsInline muted aria-label="Vista de la cámara para escanear" />
+            {cameraError && <p className="mobile-upload-error" role="alert">{cameraError}</p>}
+            <label className="scan-style">Mejora del escaneo<select value={blackAndWhite ? 'bw' : 'color'} onChange={(event) => setBlackAndWhite(event.target.value === 'bw')}><option value="color">Color mejorado</option><option value="bw">Blanco y negro</option></select></label>
+            <div className="camera-controls"><button className="primary-button" type="button" onClick={capturePage} disabled={!cameraReady || processingScan}><Camera size={17} />{processingScan ? 'Procesando…' : 'Capturar y recortar página'}</button><button className="secondary-button" type="button" onClick={() => setCameraOpen(false)}><X size={17} />Cerrar cámara</button></div>
+            {scanNotice && <p className="scan-notice" role="status">{scanNotice}</p>}
+            {processingScan && <p className="scan-notice">La imagen se procesa en este teléfono antes de subirla.</p>}
+            <small>Coloca el documento sobre una superficie plana y asegúrate de que se vean sus cuatro bordes.</small>
+          </div> : <button className="primary-button scanner-start" type="button" onClick={() => setCameraOpen(true)}><Camera size={17} />Abrir escáner con la cámara</button>}
           <label className="upload-button phone-file-picker"><FileUp size={16} />Seleccionar un escaneo o PDF<input type="file" accept="image/*,.pdf" multiple onChange={(event) => { if (event.currentTarget.files) setScanFiles((current) => [...current, ...Array.from(event.currentTarget.files || [])]); event.currentTarget.value = ''; setSaved(false) }} /></label>
           {scanFiles.length > 0 && <ul className="phone-scan-list">{scanFiles.map((file, index) => <li key={`${file.name}-${index}`}><span>{file.name}</span><button type="button" onClick={() => setScanFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Quitar ${file.name}`}><Trash2 size={15} /></button></li>)}</ul>}
           {attachments.documents.length > 0 && <p className="existing-scans">Documentos guardados: {attachments.documents.length}. El nuevo escaneo se añadirá a esta actividad.</p>}
