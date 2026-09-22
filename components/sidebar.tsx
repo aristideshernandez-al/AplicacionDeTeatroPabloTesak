@@ -31,7 +31,7 @@ export function Sidebar({ active, onNavChange, userName, userRole, activityCount
 
       <div className="brand">
         <span className="brand-mark">
-          <Activity size={18} />
+          <img src="/icon.svg" alt="" width="22" height="22" />
         </span>
         <span>Control de Actividades</span>
       </div>
