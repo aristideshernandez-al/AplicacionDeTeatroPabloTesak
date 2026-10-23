@@ -6,6 +6,8 @@ import {
   createIndividualReportConfig,
   defaultReportFilters,
   filterReportActivities,
+  reportPeriods,
+  reportPresentations,
   reportStatusLabel,
 } from "../lib/report-data";
 
@@ -15,6 +17,12 @@ test("prepara por defecto un PDF individual ligado a una actividad", () => {
   assert.equal(config.period, "ACTIVITY");
   assert.equal(config.options.includePhotos, true);
   assert.equal(config.options.includeSignatures, true);
+});
+
+test("las opciones de presentación y periodo incluyen nombres y explicaciones claras", () => {
+  assert.ok(reportPresentations.every((item) => item.label && item.description));
+  assert.ok(reportPeriods.every((item) => item.label && item.description));
+  assert.equal(reportPeriods.find((item) => item.id === "ACTIVITY")?.label, "Una actividad");
 });
 
 const profile = {

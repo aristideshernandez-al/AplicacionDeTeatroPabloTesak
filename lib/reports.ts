@@ -638,9 +638,8 @@ async function makePhotoFrame(
   config: ReportConfig,
 ): Promise<{ data: string; height: number } | null> {
   try {
-    const response = await fetchReportAsset(url);
-    if (!response.ok) return null;
-    const bitmap = await createImageBitmap(await response.blob());
+    const blob = await fetchReportAsset(url);
+    const bitmap = await createImageBitmap(blob);
     const sourceWidth = bitmap.width;
     const sourceHeight = bitmap.height;
     const factor = Math.min(1, 1600 / Math.max(sourceWidth, sourceHeight));
@@ -714,19 +713,67 @@ async function makePhotoFrame(
       data: canvas.toDataURL("image/png"),
       height: canvas.height / scale,
     };
-  } catch {
-    return null;
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : "el archivo no se pudo procesar";
+    throw new Error(`No se pudo incluir la fotografía ${index + 1}: ${detail}`);
   }
 }
 
 async function fetchReportAsset(url: string) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    window.clearTimeout(timeout);
+  const chunkBytes = 4 * 1024 * 1024;
+  const fetchChunk = async (rangeStart: number, rangeEnd: number) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch("/api/report-asset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, rangeStart, rangeEnd }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Firebase no pudo entregar el archivo.");
+      }
+      return response;
+    } catch (cause) {
+      if (cause instanceof Error && cause.name === "AbortError") {
+        throw new Error("La descarga tardó demasiado. Revisa tu conexión y vuelve a intentar.");
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  };
+
+  const first = await fetchChunk(0, chunkBytes - 1);
+  const contentType = first.headers.get("content-type") || "application/octet-stream";
+  const range = first.headers.get("content-range");
+  if (first.status !== 206 || !range) {
+    const body = await first.blob();
+    if (body.size > chunkBytes) throw new Error("Firebase no permite descargar este archivo en partes.");
+    return body;
   }
+  const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+  if (!match || Number(match[1]) !== 0) throw new Error("Firebase devolvió un tramo de archivo no válido.");
+  const total = Number(match[3]);
+  if (!Number.isSafeInteger(total) || total > 25 * 1024 * 1024) {
+    throw new Error("El archivo supera el límite de 25 MB para incluirlo en el reporte.");
+  }
+  const parts: BlobPart[] = [await first.arrayBuffer()];
+  let nextStart = Number(match[2]) + 1;
+  while (nextStart < total) {
+    const nextEnd = Math.min(total - 1, nextStart + chunkBytes - 1);
+    const response = await fetchChunk(nextStart, nextEnd);
+    const nextRange = response.headers.get("content-range");
+    const nextMatch = nextRange && /^bytes (\d+)-(\d+)\/(\d+)$/.exec(nextRange);
+    if (response.status !== 206 || !nextMatch || Number(nextMatch[1]) !== nextStart || Number(nextMatch[3]) !== total) {
+      throw new Error("Firebase no pudo completar la descarga del archivo adjunto.");
+    }
+    parts.push(await response.arrayBuffer());
+    nextStart = Number(nextMatch[2]) + 1;
+  }
+  return new Blob(parts, { type: contentType });
 }
 
 function drawReportPhotoPages(
@@ -982,15 +1029,14 @@ async function appendAttendancePages(
   const logo = logoBytes ? await document.embedPng(logoBytes).catch(() => null) : null;
   const imageAssets: Uint8Array[] = [];
   const pdfAssets: Array<{ document: import("pdf-lib").PDFDocument; pages: import("pdf-lib").PDFPage[] }> = [];
-  for (const url of urls) {
+  for (const [index, url] of urls.entries()) {
     try {
-      const response = await fetchReportAsset(url);
-      if (!response.ok) continue;
+      const blob = await fetchReportAsset(url);
       if (url.split("?")[0].toLocaleLowerCase("en-US").endsWith(".pdf")) {
-        const source = await pdfLib.PDFDocument.load(await response.arrayBuffer());
+        const source = await pdfLib.PDFDocument.load(await blob.arrayBuffer());
         pdfAssets.push({ document: source, pages: source.getPages() });
       } else {
-        const bitmap = await createImageBitmap(await response.blob());
+        const bitmap = await createImageBitmap(blob);
         const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
         const canvas = window.document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(bitmap.width * scale));
@@ -1004,8 +1050,9 @@ async function appendAttendancePages(
         bitmap.close();
         imageAssets.push(dataUrlBytes(canvas.toDataURL("image/jpeg", 0.9)));
       }
-    } catch {
-      // Android keeps generating the report if an attachment is unavailable.
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "el archivo no se pudo procesar";
+      throw new Error(`No se pudo incluir el archivo de asistencia ${index + 1}: ${detail}`);
     }
   }
   const header = (page: import("pdf-lib").PDFPage) => drawPdfLibHeader(page, logo, font, boldFont, date, config);
@@ -1028,28 +1075,24 @@ async function appendAttendancePages(
       const page = document.addPage([REPORT_PAGE_WIDTH, REPORT_PAGE_HEIGHT]);
       header(page);
       for (let slot = 0; slot < 2 && index + slot < asset.pages.length; slot++) {
-        try {
-          const copied = await document.copyPages(asset.document, [index + slot]);
-          const [embedded] = await document.embedPages(copied);
-          const scale = Math.min(availableWidth / embedded.width, pdfSlotHeight / embedded.height);
-          const width = embedded.width * scale;
-          const height = embedded.height * scale;
-          const top = REPORT_HEADER_HEIGHT + 22 + slot * (pdfSlotHeight + 18);
-          const x = margin + (availableWidth - width) / 2;
-          const y = REPORT_PAGE_HEIGHT - top - (pdfSlotHeight + height) / 2;
-          page.drawRectangle({
-            x: x - 4,
-            y: y - 4,
-            width: width + 8,
-            height: height + 8,
-            color: pdfLib.rgb(1, 1, 1),
-            borderColor: pdfLib.rgb(0.83, 0.83, 0.83),
-            borderWidth: 0.8,
-          });
-          page.drawPage(embedded, { x, y, width, height });
-        } catch {
-          // Keep the remaining activity report when a source PDF has invalid pages.
-        }
+        const copied = await document.copyPages(asset.document, [index + slot]);
+        const [embedded] = await document.embedPages(copied);
+        const scale = Math.min(availableWidth / embedded.width, pdfSlotHeight / embedded.height);
+        const width = embedded.width * scale;
+        const height = embedded.height * scale;
+        const top = REPORT_HEADER_HEIGHT + 22 + slot * (pdfSlotHeight + 18);
+        const x = margin + (availableWidth - width) / 2;
+        const y = REPORT_PAGE_HEIGHT - top - (pdfSlotHeight + height) / 2;
+        page.drawRectangle({
+          x: x - 4,
+          y: y - 4,
+          width: width + 8,
+          height: height + 8,
+          color: pdfLib.rgb(1, 1, 1),
+          borderColor: pdfLib.rgb(0.83, 0.83, 0.83),
+          borderWidth: 0.8,
+        });
+        page.drawPage(embedded, { x, y, width, height });
       }
     }
   }
@@ -1071,12 +1114,11 @@ export async function buildConfiguredReportPdf(
   const downloadedFrames = await Promise.all(
     photoUrls.map(async (url, index) => {
       const frame = await makePhotoFrame(url, index, config);
-      return frame ? { ...frame, index } : null;
+      if (!frame) throw new Error(`No se pudo preparar la fotografía ${index + 1} para el reporte.`);
+      return { ...frame, index };
     }),
   );
-  const frames = downloadedFrames.filter(
-    (frame): frame is { data: string; height: number; index: number } => frame !== null,
-  );
+  const frames = downloadedFrames;
   const basePages = makeReportActivityPdf(pdf, logoData, config, activities, frames.length);
   // Draw photos on their correct pages once each frame has been fetched.
   drawPhotoData(pdf, frames, basePages.photoGrid);

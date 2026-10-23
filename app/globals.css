@@ -1724,11 +1724,12 @@ hr {
 .report-option { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); font-size: 13px; cursor: pointer; }
 .report-option input { accent-color: #673ab7; }
 .report-color-choice { display: grid; gap: 8px; }
-.report-color-choice > span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.report-color-choice > label { margin: 0 0 3px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.report-described-select > p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .report-color-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.report-color-options button { width: 27px; height: 27px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #d1ccd7; cursor: pointer; }
+.report-color-options button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--report-swatch); box-shadow: 0 0 0 1px #d1ccd7; cursor: pointer; }
 .report-color-options button.selected { box-shadow: 0 0 0 2px #25202c; }
-.report-custom-color { position: relative; width: 28px; height: 28px; overflow: hidden; border: 1px solid #d1ccd7; border-radius: 50%; }
+.report-custom-color { position: relative; width: 30px; height: 30px; overflow: hidden; margin: 0; border: 1px solid #d1ccd7; border-radius: 50%; color: #58358a; }
 .report-custom-color input { position: absolute; inset: -7px; width: 42px; height: 42px; cursor: pointer; }
 .report-stat-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; }
 .report-stat { min-width: 0; padding: 12px; border-radius: 10px; background: #f7f5f9; }

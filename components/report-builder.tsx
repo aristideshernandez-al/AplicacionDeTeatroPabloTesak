@@ -87,11 +87,18 @@ function ReportSelect({
   options: string[];
   onChange: (value: string) => void;
 }) {
+  const presentation = reportPresentations.find((item) => item.id === value);
+  const period = reportPeriods.find((item) => item.id === value);
+  const frameStyle = photoFrameStyles.find((item) => item.id === value);
   return (
     <label className="report-field">
       {label}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {presentation?.label ?? period?.label ?? frameStyle?.label ?? option}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -121,7 +128,7 @@ function ColorChoice({
             aria-label={`${title}: ${name}`}
             aria-pressed={value.toUpperCase() === color}
             onClick={() => onChange(color)}
-            style={{ "--report-swatch": color } as React.CSSProperties}
+            style={{ "--report-swatch": color, color: color === "#FFFFFF" ? "#30263B" : "#FFFFFF" } as React.CSSProperties}
           >
             {value.toUpperCase() === color && <Check size={14} />}
           </button>
@@ -236,8 +243,14 @@ export function ReportBuilder({
       <section className="card report-section">
         <div className="report-section-heading"><CalendarDays size={20} /><div><h2>Presentación y periodo</h2><p>Define el formato narrativo y el rango temporal.</p></div></div>
         <div className="report-control-grid">
-          <ReportSelect label="Formato narrativo" value={presentation} options={reportPresentations.map((value) => value.id)} onChange={(value) => setPresentation(value as ReportPresentationId)} />
-          <ReportSelect label="Periodo" value={period} options={reportPeriods.filter((value) => scope === "INDIVIDUAL" || value.id !== "ACTIVITY").map((value) => value.id)} onChange={(value) => setPeriod(value as ReportPeriodId)} />
+          <div className="report-described-select">
+            <ReportSelect label="Cómo presentar la información" value={presentation} options={reportPresentations.map((value) => value.id)} onChange={(value) => setPresentation(value as ReportPresentationId)} />
+            <p>{reportPresentations.find((item) => item.id === presentation)?.description}</p>
+          </div>
+          <div className="report-described-select">
+            <ReportSelect label="Qué fechas incluir" value={period} options={reportPeriods.filter((value) => scope === "INDIVIDUAL" || value.id !== "ACTIVITY").map((value) => value.id)} onChange={(value) => setPeriod(value as ReportPeriodId)} />
+            <p>{reportPeriods.find((item) => item.id === period)?.description}</p>
+          </div>
         </div>
         <div className="report-selected-labels">
           <span>{reportPresentations.find((item) => item.id === presentation)?.label}</span>
@@ -334,7 +347,7 @@ export function ReportBuilder({
         <div className="report-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePreview(); }}>
           <section className="report-preview-modal" role="dialog" aria-modal="true" aria-label="Vista previa del PDF">
             <div className="report-preview-heading"><div><strong>Vista previa del PDF</strong><small>{reportPresentationTextForUi(presentation)} · {included.length} actividades</small></div><div className="button-group"><button className="secondary" onClick={() => frameRef.current?.contentWindow?.print()}><Printer size={16} /> Imprimir</button><button className="icon-button" aria-label="Cerrar vista previa" onClick={closePreview}>×</button></div></div>
-            <iframe ref={frameRef} title="Vista previa del reporte" src={previewUrl} />
+            <iframe className="report-preview-frame" ref={frameRef} title="Vista previa del reporte" src={previewUrl} />
           </section>
         </div>
       )}

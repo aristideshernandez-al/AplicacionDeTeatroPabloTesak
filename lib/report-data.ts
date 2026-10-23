@@ -13,24 +13,24 @@ export const reportScopes = [
 export type ReportScopeId = (typeof reportScopes)[number]["id"];
 
 export const reportPresentations = [
-  { id: "EXECUTIVE_SUMMARY", label: "Resumen Ejecutivo" },
-  { id: "TECHNICAL_REPORT", label: "Informe Técnico" },
-  { id: "INSTITUTIONAL_REPORT", label: "Informe Institucional" },
-  { id: "ACTIVITY_MEMORY", label: "Memoria de Actividades" },
-  { id: "STATISTICAL_REPORT", label: "Reporte Estadístico" },
+  { id: "EXECUTIVE_SUMMARY", label: "Resumen breve", description: "Muestra los datos principales y resultados de la actividad." },
+  { id: "TECHNICAL_REPORT", label: "Informe técnico", description: "Detalla el desarrollo, el equipo utilizado y las observaciones." },
+  { id: "INSTITUTIONAL_REPORT", label: "Informe institucional", description: "Organiza la información por institución, espacio y participantes." },
+  { id: "ACTIVITY_MEMORY", label: "Memoria de la actividad", description: "Presenta una descripción amplia de lo realizado y sus evidencias." },
+  { id: "STATISTICAL_REPORT", label: "Resumen de estadísticas", description: "Destaca cantidades, participación y otros indicadores." },
 ] as const;
 export type ReportPresentationId =
   (typeof reportPresentations)[number]["id"];
 
 export const reportPeriods = [
-  { id: "ACTIVITY", label: "Por Actividad" },
-  { id: "MONTHLY", label: "Mes Actual" },
-  { id: "SPECIFIC_MONTH", label: "Mes Específico" },
-  { id: "SPECIFIC_DATE", label: "Fecha Específica" },
-  { id: "TRIMESTRE", label: "Trimestral" },
-  { id: "SEMESTER", label: "Semestral" },
-  { id: "ANNUAL", label: "Anual" },
-  { id: "ALL", label: "Todo" },
+  { id: "ACTIVITY", label: "Una actividad", description: "Incluye solo la actividad que selecciones." },
+  { id: "MONTHLY", label: "Mes actual", description: "Incluye las actividades del mes en curso." },
+  { id: "SPECIFIC_MONTH", label: "Elegir mes y año", description: "Incluye las actividades del mes y año que indiques." },
+  { id: "SPECIFIC_DATE", label: "Elegir una fecha", description: "Incluye las actividades del día que indiques." },
+  { id: "TRIMESTRE", label: "Trimestre en curso", description: "Incluye las actividades de los tres meses del trimestre actual." },
+  { id: "SEMESTER", label: "Semestre actual", description: "Incluye las actividades del semestre en curso." },
+  { id: "ANNUAL", label: "Año actual", description: "Incluye las actividades del año en curso." },
+  { id: "ALL", label: "Todos los periodos", description: "Incluye actividades de cualquier fecha." },
 ] as const;
 export type ReportPeriodId = (typeof reportPeriods)[number]["id"];
 
