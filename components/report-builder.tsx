@@ -39,6 +39,7 @@ import {
   reportScopes,
   reportStatusLabel,
   reportPresentations,
+  reportOptionLabel,
   type ReportConfig,
   type ReportFilters,
   type ReportOptions,
@@ -87,16 +88,13 @@ function ReportSelect({
   options: string[];
   onChange: (value: string) => void;
 }) {
-  const presentation = reportPresentations.find((item) => item.id === value);
-  const period = reportPeriods.find((item) => item.id === value);
-  const frameStyle = photoFrameStyles.find((item) => item.id === value);
   return (
     <label className="report-field">
       {label}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option} value={option}>
-            {presentation?.label ?? period?.label ?? frameStyle?.label ?? option}
+            {reportOptionLabel(option)}
           </option>
         ))}
       </select>

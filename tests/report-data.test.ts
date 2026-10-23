@@ -8,6 +8,7 @@ import {
   filterReportActivities,
   reportPeriods,
   reportPresentations,
+  reportOptionLabel,
   reportStatusLabel,
 } from "../lib/report-data";
 
@@ -23,6 +24,14 @@ test("las opciones de presentación y periodo incluyen nombres y explicaciones c
   assert.ok(reportPresentations.every((item) => item.label && item.description));
   assert.ok(reportPeriods.every((item) => item.label && item.description));
   assert.equal(reportPeriods.find((item) => item.id === "ACTIVITY")?.label, "Una actividad");
+  assert.deepEqual(
+    reportPeriods.map((item) => reportOptionLabel(item.id)),
+    reportPeriods.map((item) => item.label),
+  );
+  assert.deepEqual(
+    reportPresentations.map((item) => reportOptionLabel(item.id)),
+    reportPresentations.map((item) => item.label),
+  );
 });
 
 const profile = {

@@ -44,6 +44,15 @@ export const photoFrameStyles = [
 ] as const;
 export type PhotoFrameStyleId = (typeof photoFrameStyles)[number]["id"];
 
+export function reportOptionLabel(value: string) {
+  return (
+    reportPresentations.find((item) => item.id === value)?.label ??
+    reportPeriods.find((item) => item.id === value)?.label ??
+    photoFrameStyles.find((item) => item.id === value)?.label ??
+    value
+  );
+}
+
 export interface ReportFilters {
   space: string;
   institution: string;
