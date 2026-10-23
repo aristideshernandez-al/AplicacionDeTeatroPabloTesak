@@ -241,7 +241,7 @@ small {
   min-height: 100vh;
 }
 .sidebar {
-  width: 252px;
+  width: 290px;
   position: fixed;
   inset: 0 auto 0 0;
   height: 100vh;
@@ -251,7 +251,7 @@ small {
   background: #fff;
   display: flex;
   flex-direction: column;
-  padding: 24px 21px 0;
+  padding: 30px 24px 0;
   z-index: 30;
 }
 .sidebar-brand {
@@ -266,8 +266,8 @@ small {
   line-height: 1.4;
 }
 .sidebar-brand img {
-  width: 46px;
-  height: 46px;
+  width: 54px;
+  height: 54px;
   object-fit: contain;
 }
 .sidebar-brand small {
@@ -279,29 +279,29 @@ small {
   margin-top: 4px;
 }
 .workspace-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: #aaa5b1;
   letter-spacing: 1.6px;
-  margin: 28px 12px 10px;
+  margin: 34px 12px 12px;
 }
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 7px;
 }
 .sidebar nav > button {
   display: flex;
   align-items: center;
   gap: 13px;
-  min-height: 41px;
-  padding: 9px 13px;
+  min-height: 48px;
+  padding: 11px 14px;
   border: 0;
   background: transparent;
   border-radius: 8px;
   text-align: left;
   color: #7c7786;
-  font-size: 13px;
+  font-size: 15px;
 }
 .sidebar nav > button:hover {
   background: #faf8fc;
@@ -366,7 +366,7 @@ small {
   font-size: 10px;
 }
 .main-shell {
-  margin-left: 252px;
+  margin-left: 290px;
   flex: 1;
   min-width: 0;
 }
@@ -1387,7 +1387,7 @@ hr {
 }
 @media (max-width: 1150px) {
   .sidebar {
-    width: 220px;
+    width: 245px;
     padding-left: 15px;
     padding-right: 15px;
   }
@@ -1398,7 +1398,7 @@ hr {
     margin: 0 -15px;
   }
   .main-shell {
-    margin-left: 220px;
+    margin-left: 245px;
   }
   .main-content {
     padding: 28px 24px 0;
@@ -1726,3 +1726,4 @@ hr {
     height: auto;
   }
 }
+

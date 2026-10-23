@@ -77,7 +77,6 @@ const nav = [
   ["institutions", "Instituciones", Building2],
   ["reports", "Reportes", BarChart3],
   ["users", "Usuarios", Users],
-  ["settings", "Configuración", SettingsIcon],
 ] as const;
 export default function TheatreApp() {
   const [authUser, setAuthUser] = useState<User | null>(null);
