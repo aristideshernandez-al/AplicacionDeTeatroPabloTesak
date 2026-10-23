@@ -16,7 +16,10 @@ export function firebase() {
     : initializeApp({
         apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || config.apiKey,
         authDomain:
-          process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || config.authDomain,
+          process.env.VERCEL_ENV === "production"
+            ? "web-design-and-database-creation.vercel.app"
+            : process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
+              config.authDomain,
         projectId:
           process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || config.projectId,
         storageBucket:
