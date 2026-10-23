@@ -55,3 +55,5 @@ La interfaz presenta acciones según rol, pero la autorización definitiva depen
 ## Validación
 
 `pnpm test` verifica fechas Android, estados históricos, numeración oficial, participantes, validación del envío, mensajes de error y exportación CSV segura. `pnpm typecheck` y `pnpm build` deben pasar sin ignorar errores. La lectura y el inicio de sesión se verifican con Firebase real; las pruebas automatizadas no escriben ni eliminan actividades de producción.
+## Publicación desde la cuenta propietaria
+En repositorios privados con Vercel Hobby, el autor del commit debe tener acceso al proyecto. Si una publicación se bloquea por la cuenta Git del equipo local, el propietario puede registrar la revisión desde su sesión autenticada de GitHub. No es necesario cambiar el plan ni modificar permisos de Firebase.
