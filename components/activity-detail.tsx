@@ -136,12 +136,6 @@ export default function ActivityDetail({
           </div>
         ))}
       </section>
-      {a.adminObservation && (
-        <section className="alert">
-          <h3>Observación de administración</h3>
-          <p>{a.adminObservation}</p>
-        </section>
-      )}
     </article>
   );
 }

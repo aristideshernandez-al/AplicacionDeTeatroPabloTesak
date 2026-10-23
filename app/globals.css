@@ -697,15 +697,12 @@ small {
   font-weight: 600;
   white-space: nowrap;
 }
-.badge.APPROVED {
-  background: #ebf6ef;
-  color: #448766;
-}
+.badge.APPROVED,
 .badge.SUBMITTED,
 .badge.ENVIADO,
 .badge.EVIADO {
-  background: #fff5e7;
-  color: #ae8444;
+  background: #ebf6ef;
+  color: #448766;
 }
 .badge.REJECTED {
   background: #fceff1;
@@ -1123,10 +1120,6 @@ td small {
 .institution-summary p {
   font-size: 12px;
   margin: 6px 0 0;
-}
-.review-panel {
-  border-top: 1px solid var(--line);
-  padding-top: 25px;
 }
 .institution-grid {
   display: grid;
@@ -1705,7 +1698,6 @@ hr {
   .topbar,
   .page-heading,
   .page-footer,
-  .review-panel,
   .alert {
     display: none;
   }

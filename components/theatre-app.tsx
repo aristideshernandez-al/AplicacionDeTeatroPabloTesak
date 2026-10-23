@@ -24,7 +24,6 @@ import {
   ChevronRight,
   FileText,
   UsersRound,
-  Clock,
   CheckCircle2,
   Menu,
   ChevronDown,
@@ -42,24 +41,21 @@ import {
   emptyInstitution,
   errorMessage,
   statusLabels,
-  isSubmitted,
+  isApproved,
   dateKey,
   type Activity,
   type Profile,
   type Institution,
   type Notice,
   type Settings,
-  type Status,
 } from "@/lib/models";
 import {
   syncProfile,
   subscribe,
   normalizeActivity,
-  ensureAdminNotices,
   patchRecord,
   putRecord,
   removeRecord,
-  reviewActivity,
 } from "@/lib/repository";
 import { exportCsv, exportExcel, exportPdf } from "@/lib/reports";
 import AuthScreen from "./auth-screen";
@@ -206,12 +202,6 @@ export default function TheatreApp() {
       setUsers([]);
     };
   }, [profile?.uid, profile?.active, admin, authUser]);
-  useEffect(() => {
-    if (admin && profile?.uid && activities.length)
-      ensureAdminNotices(activities, profile.uid).catch((e) =>
-        console.warn("No se pudieron registrar avisos de revisión.", e),
-      );
-  }, [activities, admin, profile?.uid]);
   const filtered = useMemo(
     () =>
       activities.filter(
@@ -220,8 +210,8 @@ export default function TheatreApp() {
             .toLocaleLowerCase("es")
             .includes(search.toLocaleLowerCase("es")) &&
           (!status ||
-            (status === "SUBMITTED"
-              ? isSubmitted(a.status)
+            (status === "APPROVED"
+              ? isApproved(a.status)
               : a.status === status)) &&
           (!from || dateKey(a.fecha) >= from) &&
           (!to || dateKey(a.fecha) <= to),
@@ -508,7 +498,9 @@ export default function TheatreApp() {
                 setMessage(
                   a.status === "DRAFT"
                     ? "Borrador guardado en Firebase."
-                    : "Actividad enviada correctamente.",
+                    : editor
+                      ? "Actividad actualizada correctamente."
+                      : "Actividad enviada y aprobada correctamente.",
                 );
               }}
             />
@@ -532,17 +524,15 @@ export default function TheatreApp() {
                   >
                     <Download size={16} /> PDF
                   </button>
-                  {(admin || selected.status !== "APPROVED") && (
-                    <button
-                      className="primary"
-                      onClick={() => {
-                        setEditor(selected);
-                        setSelected(null);
-                      }}
-                    >
-                      <Pencil size={16} /> Editar
-                    </button>
-                  )}
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setEditor(selected);
+                      setSelected(null);
+                    }}
+                  >
+                    <Pencil size={16} /> Editar
+                  </button>
                 </div>
               </div>
               <div className="card">
@@ -551,20 +541,6 @@ export default function TheatreApp() {
                     activities.find((a) => a.id === selected.id) || selected
                   }
                 />
-                {admin && (
-                  <Review
-                    activity={
-                      activities.find((a) => a.id === selected.id) || selected
-                    }
-                    busy={busy}
-                    onReview={(s, observation) =>
-                      action(
-                        () => reviewActivity(selected, s, observation),
-                        "Estado actualizado.",
-                      )
-                    }
-                  />
-                )}
               </div>
             </>
           ) : (
@@ -628,17 +604,17 @@ export default function TheatreApp() {
                       note="En actividades enviadas"
                     />
                     <Stat
-                      title="Pendientes de revisión"
+                      title="Borradores"
                       value={
-                        activities.filter((a) => isSubmitted(a.status)).length
+                        activities.filter((a) => a.status === "DRAFT").length
                       }
-                      icon={Clock}
-                      note="En espera de aprobación"
+                      icon={FileText}
+                      note="Actividades sin enviar"
                     />
                     <Stat
                       title="Actividades aprobadas"
                       value={
-                        activities.filter((a) => a.status === "APPROVED").length
+                        activities.filter((a) => isApproved(a.status)).length
                       }
                       icon={CheckCircle2}
                       note="Registros validados"
@@ -770,15 +746,8 @@ export default function TheatreApp() {
                         onChange={(e) => setStatus(e.target.value)}
                       >
                         <option value="">Todos los estados</option>
-                        {Object.entries(statusLabels)
-                          .filter(
-                            ([key]) => !["ENVIADO", "EVIADO"].includes(key),
-                          )
-                          .map(([key, label]) => (
-                            <option key={key} value={key}>
-                              {label}
-                            </option>
-                          ))}
+                        <option value="DRAFT">Borrador</option>
+                        <option value="APPROVED">Aprobado</option>
                       </select>
                       <label>
                         Desde
@@ -1069,7 +1038,11 @@ export default function TheatreApp() {
                               })
                             }
                           >
-                            <strong>{n.title}</strong>
+                            <strong>
+                              {n.title === "Actividad pendiente de revisión"
+                                ? "Actividad registrada"
+                                : n.title}
+                            </strong>
                             <p>{n.message}</p>
                           </button>
                           <button
@@ -1165,53 +1138,6 @@ function Empty({ title, text }: { title: string; text: string }) {
       <h3>{title}</h3>
       <p>{text}</p>
     </div>
-  );
-}
-function Review({
-  activity,
-  busy,
-  onReview,
-}: {
-  activity: Activity;
-  busy: boolean;
-  onReview: (s: Status, o: string) => void;
-}) {
-  const [observation, setObservation] = useState(activity.adminObservation);
-  return (
-    <section className="review-panel">
-      <h3>Revisión administrativa</h3>
-      <label>
-        Observación
-        <textarea
-          value={observation}
-          onChange={(e) => setObservation(e.target.value)}
-          rows={3}
-        />
-      </label>
-      <div className="button-group">
-        <button
-          className="primary"
-          disabled={busy}
-          onClick={() => onReview("APPROVED", observation)}
-        >
-          Aprobar
-        </button>
-        <button
-          className="secondary danger"
-          disabled={busy || !observation.trim()}
-          onClick={() => onReview("REJECTED", observation)}
-        >
-          Rechazar con observación
-        </button>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => onReview("ARCHIVED", observation)}
-        >
-          Archivar
-        </button>
-      </div>
-    </section>
   );
 }
 type Action = (fn: () => Promise<unknown>, success?: string) => Promise<void>;

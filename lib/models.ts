@@ -135,9 +135,9 @@ export const emptyInstitution: Institution = {
 };
 export const statusLabels: Record<Status, string> = {
   DRAFT: "Borrador",
-  SUBMITTED: "Enviado",
-  ENVIADO: "Enviado",
-  EVIADO: "Enviado",
+  SUBMITTED: "Aprobado",
+  ENVIADO: "Aprobado",
+  EVIADO: "Aprobado",
   APPROVED: "Aprobado",
   REJECTED: "Rechazado",
   ARCHIVED: "Archivado",
@@ -198,8 +198,8 @@ export function participantTotal(p: Participants) {
 export function formatCode(year: number, sequence: number) {
   return `TPT-${year}-${String(sequence).padStart(4, "0")}`;
 }
-export function isSubmitted(status: Status) {
-  return ["SUBMITTED", "ENVIADO", "EVIADO"].includes(status);
+export function isApproved(status: Status) {
+  return ["APPROVED", "SUBMITTED", "ENVIADO", "EVIADO"].includes(status);
 }
 export function dateKey(value: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;

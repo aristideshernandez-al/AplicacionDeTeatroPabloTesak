@@ -66,6 +66,7 @@ export default function ActivityForm({
   onSaved: (a: Activity) => void;
 }) {
   const key = `tpt-form:${profile.uid}:${initial?.id || "new"}`;
+  const editingSentActivity = Boolean(initial?.id && initial.status !== "DRAFT");
   const [activity, setActivity] = useState<Activity>(
     initial || blankActivity(profile),
   );
@@ -143,7 +144,7 @@ export default function ActivityForm({
     try {
       const saved = await saveActivity(
         latest.current,
-        submit ? "SUBMITTED" : "DRAFT",
+        submit ? "APPROVED" : "DRAFT",
         filesRef.current,
         (value, field, file) => {
           latest.current = value;
@@ -650,14 +651,16 @@ export default function ActivityForm({
             Anterior
           </button>
           <div>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() => save(false)}
-            >
-              <Save size={16} />
-              {busy ? "Guardando…" : "Guardar borrador"}
-            </button>
+            {!editingSentActivity && (
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() => save(false)}
+              >
+                <Save size={16} />
+                {busy ? "Guardando…" : "Guardar borrador"}
+              </button>
+            )}
             {step < 6 ? (
               <button
                 className="primary"
@@ -674,7 +677,13 @@ export default function ActivityForm({
                 onClick={() => save(true)}
               >
                 <Send size={16} />
-                {busy ? "Enviando…" : "Enviar actividad"}
+                {busy
+                  ? editingSentActivity
+                    ? "Guardando…"
+                    : "Enviando…"
+                  : editingSentActivity
+                    ? "Guardar cambios"
+                    : "Enviar actividad"}
               </button>
             )}
           </div>

@@ -21,6 +21,7 @@ import {
   androidDate,
   blankActivity,
   formatCode,
+  isApproved,
   participantTotal,
   type Activity,
   type Profile,
@@ -143,11 +144,13 @@ export async function saveActivity(
   };
   // Keep submission as a draft until every attachment is confirmed.
   const stagedStatus: Status =
-    status === "SUBMITTED" && Object.values(files).some((list) => list.length)
-      ? "DRAFT"
+    status === "APPROVED" && Object.values(files).some((list) => list.length)
+      ? activity.id && isApproved(activity.status)
+        ? activity.status
+        : "DRAFT"
       : status;
   let saved: Activity;
-  if (stagedStatus === "SUBMITTED" && !prepared.code) {
+  if (stagedStatus === "APPROVED" && !prepared.code) {
     saved = await assignCode(prepared, reference.id);
   } else {
     const existing = await getDoc(reference);
@@ -198,18 +201,18 @@ export async function saveActivity(
       checkpoint(saved, field, file);
     }
   }
-  if (status === "SUBMITTED" && saved.status !== "SUBMITTED") {
+  if (status === "APPROVED" && saved.status !== "APPROVED") {
     if (!saved.code) saved = await assignCode(saved, saved.id);
     else {
-      saved = { ...saved, status: "SUBMITTED" };
+      saved = { ...saved, status: "APPROVED" };
       await updateDoc(reference, {
-        status: "SUBMITTED",
+        status: "APPROVED",
         updatedAt: serverTimestamp(),
       });
     }
     checkpoint(saved);
   }
-  if (status === "SUBMITTED") {
+  if (status === "APPROVED") {
     // Non-admin clients cannot enumerate users under Android's rules.
     // Notification failure must never undo an already committed activity.
     try {
@@ -227,7 +230,7 @@ export async function saveActivity(
           [...recipients].map((uid) =>
             notify(
               uid,
-              "Actividad enviada",
+              activity.id ? "Actividad actualizada" : "Actividad registrada",
               `${saved.responsibleName}: ${saved.nombreActividad}`,
               saved.id,
               "ACTIVITY_SUBMITTED",
@@ -257,7 +260,7 @@ async function assignCode(activity: Activity, id: string): Promise<Activity> {
     const saved = {
       ...activity,
       id,
-      status: "SUBMITTED" as const,
+      status: "APPROVED" as const,
       code: existingCode || activity.code,
     };
     if (!saved.code) {
@@ -297,59 +300,6 @@ export async function notify(
     isRead: false,
     createdAt: serverTimestamp(),
   });
-}
-/** Admin discovers submissions without allowing normal users to list private profiles. */
-export async function ensureAdminNotices(
-  activities: Activity[],
-  adminUid: string,
-) {
-  const { db } = firebase();
-  await Promise.all(
-    activities
-      .filter((a) => ["SUBMITTED", "ENVIADO", "EVIADO"].includes(a.status))
-      .map(async (a) => {
-        const version = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
-        const reference = doc(
-          db,
-          "notifications",
-          `web_submission_${a.id}_${version}_${adminUid}`,
-        );
-        const current = await getDoc(reference);
-        if (current.exists()) return;
-        await setDoc(reference, {
-          id: reference.id,
-          userId: adminUid,
-          title: "Actividad pendiente de revisión",
-          message: `${a.responsibleName}: ${a.nombreActividad}`,
-          activityId: a.id,
-          type: "ACTIVITY_SUBMITTED",
-          isRead: false,
-          createdAt: serverTimestamp(),
-        });
-      }),
-  );
-}
-export async function reviewActivity(
-  activity: Activity,
-  status: Status,
-  observation: string,
-) {
-  await updateDoc(doc(firebase().db, "activities", activity.id), {
-    status,
-    adminObservation: observation,
-    updatedAt: serverTimestamp(),
-  });
-  try {
-    await notify(
-      activity.responsibleId,
-      status === "APPROVED" ? "Actividad aprobada" : "Actividad revisada",
-      observation || activity.nombreActividad,
-      activity.id,
-      status === "APPROVED" ? "ACTIVITY_APPROVED" : "ACTIVITY_REJECTED",
-    );
-  } catch (e) {
-    console.warn("Estado guardado; aviso pendiente.", e);
-  }
 }
 export async function removeRecord(name: string, id: string) {
   await deleteDoc(doc(firebase().db, name, id));
