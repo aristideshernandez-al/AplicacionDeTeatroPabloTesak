@@ -1,61 +1,57 @@
-# Aplicación web del Teatro Pablo Tesak
+# Teatro Pablo Tesak — aplicación web
 
-Versión web del sistema de control y seguimiento de actividades del Teatro Pablo Tesak. Su diseño se adapta a computadoras y teléfonos y comparte los datos institucionales guardados en Supabase.
+Migración de la aplicación Android a Next.js 16, Node.js y TypeScript. Usa **el mismo Firebase** (`teatropablotesak-78d51`), las mismas cuentas y las mismas colecciones. Sustituye la implementación anterior de Supabase. No se migran ni duplican los datos de producción.
+
+## Ejecutar
+
+Requisitos: Node.js 20.9 o posterior y pnpm.
+
+```sh
+pnpm install
+pnpm dev
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm start
+```
+
+La configuración pública de la aplicación web registrada está en `lib/firebase-public.json`. No contiene cuentas de servicio ni credenciales administrativas. Firebase aplica la sesión del usuario y las reglas publicadas. `.env.example` documenta las variables opcionales `NEXT_PUBLIC_FIREBASE_*` para otros entornos.
 
 ## Funciones
 
-- Inicio y cierre de sesión con Google mediante Supabase Auth.
-- Resumen, consulta y búsqueda de actividades.
-- Registro y edición de actividades con instituciones participantes.
-- Consulta del catálogo de instituciones y, para administradores, de usuarios.
-- Descarga de reportes de actividades.
+- Acceso con Google, correo/contraseña, registro, verificación de correo y recuperación de contraseña.
+- Perfiles y roles existentes; acceso de usuarios activos y administración de roles/estado de cuentas.
+- Resumen con indicadores y actividades recientes; consulta, búsqueda y filtros por estado y fecha.
+- Formulario de siete pasos con todos los campos Android: actividad, espacios, instituciones, participantes, información técnica, evidencias y resumen.
+- Borradores, edición, envío y códigos oficiales `TPT-AAAA-0001` mediante el mismo contador transaccional que Android. Un reintento conserva ID y código.
+- Fotografías (8), listas PDF (4) y otros anexos PDF (4), menos de 25 MB por archivo. Compresión de fotografías y recuperación del progreso de subida confirmado.
+- Conversión de fotos de páginas a PDF desde el navegador, incluida la selección de cámara disponible en teléfonos. No incorpora el recorte automático del escáner nativo ML Kit de Android.
+- Aprobación, rechazo con observaciones y archivo; catálogos de instituciones y opciones compartidos con Android.
+- Notificaciones de revisión. Al abrir la web como administrador, se generan avisos de actividades enviadas pendientes, sin conceder a usuarios normales acceso a perfiles privados. No se agregan push ni correo automático.
+- Exportación CSV, Excel, PDF de listado y PDF individual con fotografías y anexos PDF incorporados. Los archivos protegidos o dañados pueden impedir unir un anexo y se informa el fallo; la actividad no se altera.
+- Edición de perfil y fotografía, solicitud de eliminación de cuenta y página de privacidad.
+- Diseño adaptable a teléfonos y computadoras con identidad visual del teatro.
 
-La aplicación usa Supabase para autenticación y base de datos. Firebase ya no forma parte del inicio de sesión de la web. Las tablas conservan su protección RLS; el sistema requiere una sesión autenticada para consultar los datos restringidos.
+## Compatibilidad con Android
 
-## Configurar Google en Supabase
+Las colecciones son `activities`, `counters`, `users`, `institutions`, `appData/settings` y `notifications`. Los nombres de campos, enum de estados, rutas de evidencias y formato de códigos se conservan. Se reconocen `SUBMITTED`, `ENVIADO` y el alias histórico `EVIADO`. Las fechas Android `d/M/yyyy` se pueden filtrar junto con fechas ISO y se escriben como `dd/MM/yyyy`.
 
-1. En Supabase, abre **Authentication → Sign In / Providers → Google** y habilita Google.
-2. En Google Cloud Console, crea o reutiliza un cliente OAuth de tipo **Aplicación web**. En sus URI de redirección autorizados agrega la URL de callback que muestra Supabase: `https://<id-del-proyecto>.supabase.co/auth/v1/callback`.
-3. Copia el ID y el secreto de ese cliente OAuth en la configuración del proveedor Google de Supabase. No los guardes en el repositorio ni en variables `NEXT_PUBLIC_`.
-4. En **Authentication → URL Configuration**, establece como URL del sitio el dominio de producción y agrega también `http://localhost:3000/**` y el dominio de producción a las URL de redirección permitidas.
-5. En la configuración del proveedor OAuth de Google, agrega el dominio de producción a los orígenes JavaScript autorizados.
+El texto del formulario se guarda en localStorage por UID y actividad. Los archivos sin subir no sobreviven al cierre de la pestaña y deben seleccionarse otra vez. El guardado en Firebase y la asignación del código requieren internet; el guardado local del formulario es independiente. No se afirma que un envío se completó hasta confirmar la operación remota y las evidencias.
 
-Al terminar, Supabase intercambiará el acceso de Google por una sesión propia. Esa sesión cumple las políticas RLS de las tablas sin habilitar lectura anónima. Si se cambia de Firebase Auth a Supabase Auth, las cuentas reciben identificadores de usuario Supabase; revisa y vincula los perfiles administrativos existentes antes de usar funciones de administrador.
+## v0 y Vercel
 
-## Preparar el proyecto
+El repositorio conectado es `aristideshernandez-al/AplicacionDeTeatroPabloTesak`; la rama de producción de Vercel es `main`. El proyecto existente es `web-design-and-database-creation`, con dominio `https://web-design-and-database-creation.vercel.app`.
 
-Requisitos: Node.js 20 o posterior y `pnpm`.
+La publicación se realiza mediante el push de `main`, sin reemplazar el historial ni forzar ramas. La etiqueta `backup-before-firebase-web-20261023` conserva el estado anterior. En v0, sincroniza la rama `main` para continuar editando el código actualizado; evita publicar una conversación antigua que todavía utilice Supabase.
 
-Instala las dependencias:
+El dominio de producción y `localhost` ya estaban autorizados en Firebase Authentication al revisar el proyecto. Para un dominio nuevo, debes autorizarlo en Firebase Authentication → Configuración → Dominios autorizados. No es necesario crear usuarios nuevos ni cambiar sus UID. Las variables Supabase existentes de Vercel ya no se utilizan.
 
-```bash
-pnpm install
-```
+## Reglas de Firebase
 
-Crea `.env.local` basado en `.env.example`:
+Las reglas publicadas fueron inspeccionadas y no se modifican ni despliegan automáticamente desde este repositorio. Las reglas locales del proyecto Android son distintas de producción: no deben desplegarse sin revisión. En particular, una regla que prohíba todo cambio de `code` impide enviar borradores sin código como usuario normal.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-clave-publica
-```
+La interfaz presenta acciones según rol, pero la autorización definitiva depende de las reglas publicadas de Firebase. Las reglas actuales permiten a cuentas autenticadas más operaciones de las que expone la interfaz; endurecerlas requiere un cambio separado compatible con Android. Nunca colocar claves privadas en `NEXT_PUBLIC_*` ni habilitar lectura anónima para resolver problemas de permisos.
 
-Si el proyecto usa todavía la clave anónima, puedes definir `NEXT_PUBLIC_SUPABASE_ANON_KEY` en su lugar. Las claves públicas deben estar protegidas por políticas RLS. Nunca agregues una clave `service_role` o secreta a variables `NEXT_PUBLIC_`. `.env.local` está excluido de Git.
+## Validación
 
-Inicia el servidor local con `pnpm dev` y abre [http://localhost:3000](http://localhost:3000).
-
-## Comandos
-
-| Comando | Descripción |
-| --- | --- |
-| `pnpm dev` | Inicia el servidor de desarrollo. |
-| `pnpm build` | Genera la versión optimizada para producción. |
-| `pnpm start` | Ejecuta la versión de producción después de compilarla. |
-
-## Estructura principal
-
-```text
-app/                 Pantallas, callback de autenticación y estilos
-components/          Formularios y componentes reutilizables
-lib/supabase/        Clientes de Supabase para navegador y servidor
-public/              Recursos estáticos
-```
+`pnpm test` verifica fechas Android, estados históricos, numeración oficial, participantes, validación del envío, mensajes de error y exportación CSV segura. `pnpm typecheck` y `pnpm build` deben pasar sin ignorar errores. La lectura y el inicio de sesión se verifican con Firebase real; las pruebas automatizadas no escriben ni eliminan actividades de producción.
