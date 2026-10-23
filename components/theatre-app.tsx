@@ -27,6 +27,7 @@ import {
   Clock,
   CheckCircle2,
   Menu,
+  ChevronDown,
   Download,
   WifiOff,
   LoaderCircle,
@@ -91,6 +92,7 @@ export default function TheatreApp() {
   const [online, setOnline] = useState(true);
   const [view, setView] = useState<View>("home");
   const [menu, setMenu] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
@@ -423,13 +425,53 @@ export default function TheatreApp() {
               <Bell size={19} />
               {unread > 0 && <i />}
             </button>
-            <button
-              className="avatar"
-              aria-label="Mi perfil"
-              onClick={() => navigate("settings")}
-            >
-              {profile.fullName.charAt(0).toUpperCase()}
-            </button>
+            <div className="profile-menu-wrap">
+              <button
+                className="profile-trigger"
+                aria-label="Perfil y cierre de sesión"
+                title="Perfil y cierre de sesión"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+                onClick={() => setProfileMenuOpen((open) => !open)}
+              >
+                <span className="avatar">
+                  {profile.fullName.charAt(0).toUpperCase()}
+                </span>
+                <ChevronDown size={14} />
+              </button>
+              {profileMenuOpen && (
+                <div className="profile-menu" role="menu" aria-label="Menú de perfil">
+                  <div className="profile-menu-heading">
+                    <strong>{profile.fullName}</strong>
+                    <small>{profile.email}</small>
+                  </div>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      navigate("settings");
+                    }}
+                  >
+                    <SettingsIcon size={16} /> Mi perfil
+                  </button>
+                  <button
+                    className="danger"
+                    role="menuitem"
+                    onClick={() =>
+                      action(async () => {
+                        await signOut(firebase().auth);
+                        setEditor(undefined);
+                        setSelected(null);
+                        setError("");
+                        setProfileMenuOpen(false);
+                      })
+                    }
+                  >
+                    <LogOut size={16} /> Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main className="main-content">
