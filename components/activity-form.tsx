@@ -114,7 +114,6 @@ export default function ActivityForm({
       if (
         filesRef.current.photoUrls.length ||
         filesRef.current.attendanceListUrls.length ||
-        filesRef.current.otherAnnexUrls.length ||
         saving.current
       ) {
         e.preventDefault();
@@ -539,15 +538,13 @@ export default function ActivityForm({
                 }}
               />
               <p className="muted">
-                Adjunta fotografías o documentos. En el teléfono puedes tomar
-                fotos desde el selector de archivos. Las listas y anexos se
-                reciben en PDF.
+                Adjunta fotografías o listas de asistencia. En el teléfono
+                puedes tomar fotos desde el selector de archivos.
               </p>
               {(
                 [
                   "photoUrls",
                   "attendanceListUrls",
-                  "otherAnnexUrls",
                 ] as EvidenceField[]
               ).map((field) => (
                 <div className="upload-section" key={field}>
@@ -559,9 +556,7 @@ export default function ActivityForm({
                     )}{" "}
                     {field === "photoUrls"
                       ? "Fotografías (máximo 8)"
-                      : field === "attendanceListUrls"
-                        ? "Listas de asistencia (máximo 4 PDFs)"
-                        : "Otros anexos (máximo 4 PDFs)"}
+                      : "Listas de asistencia (máximo 4 PDFs)"}
                   </h3>
                   <input
                     aria-label={`Adjuntar ${field === "photoUrls" ? "fotografías" : field === "attendanceListUrls" ? "listas de asistencia" : "otros anexos"}`}
@@ -725,6 +720,9 @@ export function InstitutionFields({
               }
             >
               <option value="">Seleccionar tipo</option>
+              {institution[key] && !types.includes(institution[key]) && (
+                <option value={institution[key]}>{institution[key]}</option>
+              )}
               {types.map((type) => (
                 <option key={type}>{type}</option>
               ))}
