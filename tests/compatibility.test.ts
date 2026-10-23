@@ -5,7 +5,8 @@ import {
   dateKey,
   formatCode,
   participantTotal,
-  isSubmitted,
+  isApproved,
+  statusLabels,
   errorMessage,
   blankActivity,
   validateActivity,
@@ -20,10 +21,13 @@ test("fechas de Android y web se filtran juntas", () => {
   assert.equal(dateKey("2026-10-22"), "2026-10-22");
   assert.equal(androidDate("2026-10-22"), "22/10/2026");
 });
-test("incluye los estados históricos Android en pendientes", () => {
+test("muestra como aprobados los envíos y alias históricos de Android", () => {
   for (const s of ["SUBMITTED", "ENVIADO", "EVIADO"] as const)
-    assert.equal(isSubmitted(s), true);
-  assert.equal(isSubmitted("DRAFT"), false);
+    assert.equal(isApproved(s), true);
+  for (const s of ["SUBMITTED", "ENVIADO", "EVIADO"] as const)
+    assert.equal(statusLabels[s], "Aprobado");
+  assert.equal(isApproved("APPROVED"), true);
+  assert.equal(isApproved("DRAFT"), false);
 });
 test("suma todas las categorías de participantes", () =>
   assert.equal(

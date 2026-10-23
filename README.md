@@ -23,11 +23,11 @@ La configuración pública de la aplicación web registrada está en `lib/fireba
 - Perfiles y roles existentes; acceso de usuarios activos y administración de roles/estado de cuentas.
 - Resumen con indicadores y actividades recientes; consulta, búsqueda y filtros por estado y fecha.
 - Formulario de siete pasos con todos los campos Android: actividad, espacios, instituciones, participantes, información técnica, evidencias y resumen.
-- Borradores, edición, envío y códigos oficiales `TPT-AAAA-0001` mediante el mismo contador transaccional que Android. Un reintento conserva ID y código.
+- Borradores, edición y envío con aprobación automática; el envío genera códigos oficiales `TPT-AAAA-0001` mediante el mismo contador transaccional que Android. Un reintento conserva ID y código.
 - Fotografías (8), listas PDF (4) y otros anexos PDF (4), menos de 25 MB por archivo. Compresión de fotografías y recuperación del progreso de subida confirmado.
 - Conversión de fotos de páginas a PDF desde el navegador, incluida la selección de cámara disponible en teléfonos. No incorpora el recorte automático del escáner nativo ML Kit de Android.
-- Aprobación, rechazo con observaciones y archivo; catálogos de instituciones y opciones compartidos con Android.
-- Notificaciones de revisión. Al abrir la web como administrador, se generan avisos de actividades enviadas pendientes, sin conceder a usuarios normales acceso a perfiles privados. No se agregan push ni correo automático.
+- El envío deja la actividad aprobada automáticamente. No hay cola de revisión ni acciones de aprobar, rechazar o archivar; las actividades se pueden editar.
+- Catálogos de instituciones y opciones compartidos con Android. Las notificaciones existentes no implican revisión manual ni aprobación posterior.
 - Exportación CSV, Excel, PDF de listado y PDF individual con fotografías y anexos PDF incorporados. Los archivos protegidos o dañados pueden impedir unir un anexo y se informa el fallo; la actividad no se altera.
 - Edición de perfil y fotografía, solicitud de eliminación de cuenta y página de privacidad.
 - Diseño adaptable a teléfonos y computadoras con identidad visual del teatro.

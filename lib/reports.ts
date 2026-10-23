@@ -175,7 +175,6 @@ export async function exportPdf(activities: Activity[], detailed = false) {
           ["Observaciones técnicas", a.technicalInfo.observations],
           ["Fallas", a.technicalInfo.failures],
           ["Requiere revisión", a.technicalInfo.requiresReview],
-          ["Observación administrativa", a.adminObservation],
           [
             "Evidencias",
             `${a.photoUrls.length} fotografías · ${a.attendanceListUrls.length} listas · ${a.otherAnnexUrls.length} anexos`,
