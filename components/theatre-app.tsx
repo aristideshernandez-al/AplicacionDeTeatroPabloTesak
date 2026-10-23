@@ -79,7 +79,6 @@ const nav = [
   ["activities", "Actividades", CalendarDays],
   ["institutions", "Instituciones", Building2],
   ["reports", "Reportes", BarChart3],
-  ["notifications", "Notificaciones", Bell],
   ["users", "Usuarios", Users],
   ["settings", "Configuración", SettingsIcon],
 ] as const;
@@ -354,19 +353,10 @@ export default function TheatreApp() {
               >
                 <Icon size={19} />
                 <span>{label}</span>
-                {id === "notifications" && unread > 0 && (
-                  <b className="count">{unread}</b>
-                )}
               </button>
             ))}
         </nav>
         <div className="sidebar-bottom">
-          <img src="/logo-mined.png" alt="MINEDUCYT" />
-          <p>
-            El arte transforma.
-            <br />
-            La educación nos une.
-          </p>
           <div className="profile-chip">
             <div className="avatar">
               {profile.fullName.charAt(0).toUpperCase()}

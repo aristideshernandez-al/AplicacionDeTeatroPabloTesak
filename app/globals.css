@@ -246,13 +246,12 @@ small {
   inset: 0 auto 0 0;
   height: 100vh;
   height: 100dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: #fff;
   display: flex;
   flex-direction: column;
-  padding: 31px 21px 0;
+  padding: 24px 21px 0;
   z-index: 30;
 }
 .sidebar-brand {
@@ -284,19 +283,19 @@ small {
   font-weight: 700;
   color: #aaa5b1;
   letter-spacing: 1.6px;
-  margin: 41px 12px 15px;
+  margin: 28px 12px 10px;
 }
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 .sidebar nav > button {
   display: flex;
   align-items: center;
   gap: 13px;
-  min-height: 45px;
-  padding: 11px 14px;
+  min-height: 41px;
+  padding: 9px 13px;
   border: 0;
   background: transparent;
   border-radius: 8px;
@@ -321,20 +320,8 @@ small {
 }
 .sidebar-bottom {
   margin-top: auto;
-  padding-top: 45px;
+  padding-top: 16px;
   flex-shrink: 0;
-}
-.sidebar-bottom > img {
-  width: 110px;
-  height: 38px;
-  object-fit: contain;
-  object-position: left;
-}
-.sidebar-bottom > p {
-  font-size: 11px;
-  color: #aaa5b1;
-  margin: 12px 0 26px;
-  line-height: 1.8;
 }
 .profile-chip {
   border-top: 1px solid var(--line);
@@ -342,7 +329,7 @@ small {
   gap: 10px;
   align-items: center;
   margin: 0 -21px;
-  padding: 18px 14px;
+  padding: 11px 14px;
 }
 .avatar {
   border: 0;
