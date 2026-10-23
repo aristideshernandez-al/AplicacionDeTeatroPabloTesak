@@ -58,7 +58,9 @@ import {
   putRecord,
   removeRecord,
 } from "@/lib/repository";
-import { exportCsv, exportExcel, exportPdf } from "@/lib/reports";
+import { exportConfiguredReportPdf } from "@/lib/reports";
+import { createIndividualReportConfig } from "@/lib/report-data";
+import { ReportBuilder } from "@/components/report-builder";
 import AuthScreen from "./auth-screen";
 import ActivityForm, { InstitutionFields } from "./activity-form";
 import ActivityDetail from "./activity-detail";
@@ -521,10 +523,15 @@ export default function TheatreApp() {
                 <div className="button-group">
                   <button
                     className="secondary"
+                    title="Generar el reporte PDF de esta actividad"
                     disabled={busy}
-                    onClick={() => action(() => exportPdf([selected], true))}
+                    onClick={() =>
+                      action(() =>
+                        exportConfiguredReportPdf(createIndividualReportConfig(), [selected]),
+                      )
+                    }
                   >
-                    <Download size={16} /> PDF
+                    <Download size={16} /> PDF individual
                   </button>
                   <button
                     className="primary"
@@ -706,21 +713,27 @@ export default function TheatreApp() {
                   </div>
                 </>
               )}
-              {(view === "activities" || view === "reports") && (
+              {view === "reports" && (
                 <>
                   <div className="page-heading">
                     <div>
                       <span className="eyebrow">REGISTRO INSTITUCIONAL</span>
-                      <h1>
-                        {view === "reports"
-                          ? "Reportes y resultados"
-                          : "Actividades"}
-                      </h1>
+                      <h1>Reportes y resultados</h1>
                       <p className="muted">
-                        {view === "reports"
-                          ? "Filtra los registros y descarga la información que necesitas."
-                          : "Consulta, registra y da seguimiento a cada actividad."}
+                        Genera los mismos informes institucionales que produce la aplicación Android.
                       </p>
+                    </div>
+                  </div>
+                  <ReportBuilder activities={activities} />
+                </>
+              )}
+              {view === "activities" && (
+                <>
+                  <div className="page-heading">
+                    <div>
+                      <span className="eyebrow">REGISTRO INSTITUCIONAL</span>
+                      <h1>Actividades</h1>
+                      <p className="muted">Consulta, registra y da seguimiento a cada actividad.</p>
                     </div>
                     {view === "activities" && (
                       <button
@@ -768,41 +781,6 @@ export default function TheatreApp() {
                         />
                       </label>
                     </div>
-                    {view === "reports" && (
-                      <div className="report-actions">
-                        <strong>
-                          {filtered.length} registros ·{" "}
-                          {filtered.reduce(
-                            (sum, a) => sum + a.participants.totalGeneral,
-                            0,
-                          )}{" "}
-                          participantes
-                        </strong>
-                        <div className="button-group">
-                          <button
-                            className="secondary"
-                            disabled={busy || !filtered.length}
-                            onClick={() => exportCsv(filtered)}
-                          >
-                            CSV
-                          </button>
-                          <button
-                            className="secondary"
-                            disabled={busy || !filtered.length}
-                            onClick={() => action(() => exportExcel(filtered))}
-                          >
-                            Excel
-                          </button>
-                          <button
-                            className="primary"
-                            disabled={busy || !filtered.length}
-                            onClick={() => action(() => exportPdf(filtered))}
-                          >
-                            <Download size={16} /> PDF
-                          </button>
-                        </div>
-                      </div>
-                    )}
                     <div className="table-scroll">
                       <table className="activities-table">
                         <thead>
