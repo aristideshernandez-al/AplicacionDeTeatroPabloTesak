@@ -107,7 +107,6 @@ export default function ActivityDetail({
           [
             ["photoUrls", "Fotografías"],
             ["attendanceListUrls", "Listas de asistencia"],
-            ["otherAnnexUrls", "Otros anexos"],
           ] as const
         ).map(([key, label]) => (
           <div key={key}>

@@ -1177,6 +1177,14 @@ td small {
   font-size: 12px;
   padding: 6px 0;
 }
+.catalog .row > span {
+  flex: 1;
+}
+.catalog .row > input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
 .catalog form.row {
   border: 0;
   gap: 8px;

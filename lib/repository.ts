@@ -24,6 +24,7 @@ import {
   isApproved,
   participantTotal,
   type Activity,
+  type Institution,
   type Profile,
   type Status,
 } from "./models";
@@ -82,6 +83,20 @@ export function normalizeActivity(data: DocumentData): Activity {
     participants: { ...base.participants, ...data.participants },
     technicalInfo: { ...base.technicalInfo, ...data.technicalInfo },
   } as Activity;
+}
+export function normalizeInstitution(data: DocumentData): Institution {
+  return {
+    name: String(data.name ?? data.nombre ?? data.nombreInstitucion ?? ""),
+    type: String(data.type ?? data.tipo ?? data.tipoInstitucion ?? ""),
+    department: String(data.department ?? data.departamento ?? ""),
+    municipality: String(data.municipality ?? data.municipio ?? ""),
+    district: String(data.district ?? data.distrito ?? ""),
+    infrastructureCode: String(
+      data.infrastructureCode ?? data.codigoInfraestructura ?? data.codigo ?? "",
+    ),
+    contactName: String(data.contactName ?? data.nombreContacto ?? data.contacto ?? ""),
+    contactPhone: String(data.contactPhone ?? data.telefonoContacto ?? data.telefono ?? ""),
+  };
 }
 export type EvidenceField =
   "photoUrls" | "attendanceListUrls" | "otherAnnexUrls";

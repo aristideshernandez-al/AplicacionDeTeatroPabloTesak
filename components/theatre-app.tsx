@@ -53,6 +53,7 @@ import {
   syncProfile,
   subscribe,
   normalizeActivity,
+  normalizeInstitution,
   patchRecord,
   putRecord,
   removeRecord,
@@ -169,7 +170,9 @@ export default function TheatreApp() {
         "institutions",
         (list) =>
           setInstitutions(
-            list.sort((a, b) => a.name.localeCompare(b.name, "es")),
+            list
+              .map(normalizeInstitution)
+              .sort((a, b) => a.name.localeCompare(b.name, "es")),
           ),
         fail,
       ),
@@ -1157,6 +1160,52 @@ function Institutions({
   const [editing, setEditing] = useState<Institution | null>(null);
   const [query, setQuery] = useState("");
   const [original, setOriginal] = useState("");
+  if (editing) {
+    return (
+      <section className="institution-editor-page">
+        <div className="page-heading">
+          <div>
+            <h1>{original ? "Editar institución" : "Nueva institución"}</h1>
+            <p className="muted">Completa los datos de la institución.</p>
+          </div>
+          <button className="secondary" type="button" onClick={() => setEditing(null)}>
+            Volver a instituciones
+          </button>
+        </div>
+        <form
+          className="card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!editing.name.trim() || editing.name.includes("/")) return;
+            action(async () => {
+              await putRecord("institutions", original || editing.name, {
+                ...editing,
+                name: original || editing.name,
+              });
+              setEditing(null);
+            }, "Institución guardada.");
+          }}
+        >
+          {original && (
+            <p className="muted">El nombre identifica la institución y se conserva al editar.</p>
+          )}
+          <InstitutionFields
+            institution={editing}
+            types={settings.tiposInstitucion}
+            onChange={(value) => setEditing({ ...value, name: original || value.name })}
+          />
+          <div className="button-group">
+            <button className="primary" disabled={busy || !editing.name.trim() || editing.name.includes("/")}>
+              Guardar institución
+            </button>
+            <button type="button" className="secondary" onClick={() => setEditing(null)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </section>
+    );
+  }
   return (
     <>
       <div className="page-heading">
@@ -1176,53 +1225,6 @@ function Institutions({
           </button>
         )}
       </div>
-      {editing && (
-        <form
-          className="card"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!editing.name.trim() || editing.name.includes("/")) return;
-            action(async () => {
-              await putRecord("institutions", original || editing.name, {
-                ...editing,
-                name: original || editing.name,
-              });
-              setEditing(null);
-            }, "Institución guardada.");
-          }}
-        >
-          <h2>{original ? "Editar" : "Nueva"} institución</h2>
-          {original && (
-            <p className="muted">
-              El nombre identifica la institución y se conserva al editar.
-            </p>
-          )}
-          <InstitutionFields
-            institution={editing}
-            types={settings.tiposInstitucion}
-            onChange={(value) =>
-              setEditing({ ...value, name: original || value.name })
-            }
-          />
-          <div className="button-group">
-            <button
-              className="primary"
-              disabled={
-                busy || !editing.name.trim() || editing.name.includes("/")
-              }
-            >
-              Guardar institución
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setEditing(null)}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
       <div className="card">
         <label className="search-field">
           <Search size={18} />
@@ -1254,7 +1256,7 @@ function Institutions({
                     <button
                       className="text-button"
                       onClick={() => {
-                        setEditing(i);
+                        setEditing({ ...emptyInstitution, ...normalizeInstitution(i) });
                         setOriginal(i.name);
                       }}
                     >
@@ -1450,6 +1452,8 @@ function Catalog({
   action: Action;
 }) {
   const [value, setValue] = useState("");
+  const [editingValue, setEditingValue] = useState("");
+  const [draft, setDraft] = useState("");
   const labels: Record<keyof Settings, string> = {
     areasIncidencia: "Áreas de incidencia",
     tiposActividad: "Tipos de actividad",
@@ -1461,22 +1465,50 @@ function Catalog({
       <h3>{labels[name]}</h3>
       {values.map((v) => (
         <div className="row" key={v}>
-          <span>{v}</span>
-          <button
-            className="icon-button danger"
-            aria-label={`Quitar ${v}`}
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm(`¿Quitar «${v}» del catálogo compartido?`))
-                action(() =>
-                  putRecord("appData", "settings", {
-                    [name]: values.filter((old) => old !== v),
-                  }),
-                );
-            }}
-          >
-            <X size={15} />
-          </button>
+          {editingValue === v ? (
+            <>
+              <input aria-label={`Editar ${v}`} value={draft} onChange={(e) => setDraft(e.target.value)} />
+              <button
+                className="icon-button"
+                aria-label={`Guardar ${v}`}
+                disabled={busy || !draft.trim() || (draft.trim() !== v && values.includes(draft.trim()))}
+                onClick={() => action(async () => {
+                  await putRecord("appData", "settings", {
+                    [name]: values.map((old) => old === v ? draft.trim() : old),
+                  });
+                  setEditingValue("");
+                  setDraft("");
+                })}
+              >
+                <CheckCircle2 size={16} />
+              </button>
+              <button className="icon-button" aria-label="Cancelar edición" onClick={() => setEditingValue("")}>
+                <X size={15} />
+              </button>
+            </>
+          ) : (
+            <>
+              <span>{v}</span>
+              <button className="icon-button" aria-label={`Editar ${v}`} disabled={busy} onClick={() => { setEditingValue(v); setDraft(v); }}>
+                <Pencil size={15} />
+              </button>
+              <button
+                className="icon-button danger"
+                aria-label={`Quitar ${v}`}
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`¿Quitar «${v}» del catálogo compartido?`))
+                    action(() =>
+                      putRecord("appData", "settings", {
+                        [name]: values.filter((old) => old !== v),
+                      }),
+                    );
+                }}
+              >
+                <X size={15} />
+              </button>
+            </>
+          )}
         </div>
       ))}
       <form
