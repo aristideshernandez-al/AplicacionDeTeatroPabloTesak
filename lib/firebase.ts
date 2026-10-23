@@ -11,15 +11,16 @@ import config from "./firebase-public.json";
 
 export function firebase() {
   const existed = getApps().length > 0;
+  const isProductionSite =
+    typeof window !== "undefined" &&
+    window.location.hostname === "web-design-and-database-creation.vercel.app";
   const app = existed
     ? getApp()
     : initializeApp({
         apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || config.apiKey,
-        authDomain:
-          process.env.VERCEL_ENV === "production"
-            ? "web-design-and-database-creation.vercel.app"
-            : process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-              config.authDomain,
+        authDomain: isProductionSite
+          ? "web-design-and-database-creation.vercel.app"
+          : process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || config.authDomain,
         projectId:
           process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || config.projectId,
         storageBucket:
