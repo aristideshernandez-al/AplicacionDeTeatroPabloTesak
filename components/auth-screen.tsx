@@ -1,8 +1,9 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   GoogleAuthProvider,
-  signInWithPopup,
+  getRedirectResult,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -18,6 +19,15 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void getRedirectResult(firebase().auth).catch((e) => {
+      if (mounted) setError(errorMessage(e));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   async function perform(action: () => Promise<unknown>) {
     setBusy(true);
     setError("");
@@ -111,7 +121,10 @@ export default function AuthScreen() {
                 disabled={busy}
                 onClick={() =>
                   perform(() =>
-                    signInWithPopup(firebase().auth, new GoogleAuthProvider()),
+                    signInWithRedirect(
+                      firebase().auth,
+                      new GoogleAuthProvider(),
+                    ),
                   )
                 }
               >
