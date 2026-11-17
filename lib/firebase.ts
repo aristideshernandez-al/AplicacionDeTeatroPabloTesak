@@ -7,6 +7,7 @@ import {
   memoryLocalCache,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getFunctions } from "firebase/functions";
 import config from "./firebase-public.json";
 
 export function firebase() {
@@ -37,5 +38,5 @@ export function firebase() {
         localCache: memoryLocalCache(),
         experimentalAutoDetectLongPolling: true,
       });
-  return { auth: getAuth(app), db, storage: getStorage(app) };
+  return { auth: getAuth(app), db, storage: getStorage(app), functions: getFunctions(app, "us-central1") };
 }

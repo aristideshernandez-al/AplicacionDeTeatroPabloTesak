@@ -60,6 +60,7 @@ import {
 } from "@/lib/repository";
 import { exportConfiguredReportPdf } from "@/lib/reports";
 import { createIndividualReportConfig } from "@/lib/report-data";
+import { DriveConnectionPanel } from "@/components/drive-connection-panel";
 import { ReportBuilder } from "@/components/report-builder";
 import AuthScreen from "./auth-screen";
 import ActivityForm, { InstitutionFields } from "./activity-form";
@@ -104,6 +105,11 @@ export default function TheatreApp() {
   const [busy, setBusy] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const admin = profile?.role?.trim().toUpperCase() === "ADMIN";
+  useEffect(() => {
+    if (profile && new URLSearchParams(window.location.search).get("connectDrive") === "1") {
+      setView("settings");
+    }
+  }, [profile]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     update();
@@ -1396,6 +1402,7 @@ function SettingsPanel({
               : "Solicitar eliminación"}
           </button>
         </section>
+        <DriveConnectionPanel />
       </div>
       {admin && (
         <section className="card">
