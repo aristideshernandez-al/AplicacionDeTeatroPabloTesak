@@ -106,7 +106,8 @@ export default function TheatreApp() {
   const [loadingData, setLoadingData] = useState(true);
   const admin = profile?.role?.trim().toUpperCase() === "ADMIN";
   useEffect(() => {
-    if (profile && new URLSearchParams(window.location.search).get("connectDrive") === "1") {
+    const params = new URLSearchParams(window.location.search);
+    if (profile && (params.get("connectDrive") === "1" || (params.has("code") && params.has("state")))) {
       setView("settings");
     }
   }, [profile]);

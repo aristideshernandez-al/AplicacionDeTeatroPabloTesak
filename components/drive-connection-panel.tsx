@@ -13,11 +13,11 @@ declare global {
           initCodeClient: (options: {
             client_id: string;
             scope: string;
-            ux_mode: "popup";
+            ux_mode: "redirect";
+            redirect_uri: string;
+            state: string;
             select_account: boolean;
             prompt: string;
-            callback: (response: { code?: string; error?: string }) => void;
-            error_callback?: (error: { type?: string }) => void;
           }) => { requestCode: () => void };
         };
       };
@@ -49,6 +49,29 @@ export function DriveConnectionPanel() {
       script.dataset.googleIdentity = "true";
       document.head.appendChild(script);
     }
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (code && state) {
+      window.history.replaceState(null, "", window.location.pathname);
+      const savedState = window.localStorage.getItem("tpt-drive-oauth-state");
+      window.localStorage.removeItem("tpt-drive-oauth-state");
+      if (savedState !== state) {
+        setError("La autorización no coincide con esta sesión. Vuelve a conectar Google Drive.");
+        return;
+      }
+      setBusy(true);
+      void httpsCallable<{ code: string; state: string; redirectUri: string }, Status>(firebase().functions, "completeDriveConnection")({
+        code,
+        state,
+        redirectUri: `${window.location.origin}/`,
+      }).then((result) => {
+        setStatus(result.data);
+        setMessage(`Google Drive conectado como ${result.data.email}. Se reintentará guardar el reporte pendiente.`);
+      }).catch((reason) => {
+        setError(reason instanceof Error ? reason.message : "No se pudo completar la conexión con Google Drive.");
+      }).finally(() => setBusy(false));
+    }
   }, []);
 
   async function connect() {
@@ -59,21 +82,18 @@ export function DriveConnectionPanel() {
       if (!window.google?.accounts?.oauth2) throw new Error("No se pudo cargar la autorización segura de Google. Recarga la página e inténtalo de nuevo.");
       const auth = firebase().auth;
       if (!auth.currentUser) throw new Error("Tu sesión expiró. Inicia sesión de nuevo.");
-      const code = await new Promise<string>((resolve, reject) => {
-        const client = window.google!.accounts!.oauth2!.initCodeClient({
-          client_id: CLIENT_ID,
-          scope: "openid email https://www.googleapis.com/auth/drive",
-          ux_mode: "popup",
-          select_account: true,
-          prompt: "consent select_account",
-          callback: (response) => response.code ? resolve(response.code) : reject(new Error(response.error || "Google no devolvió el permiso de Drive.")),
-          error_callback: (reason) => reject(new Error(reason.type || "No se completó la autorización de Google Drive.")),
-        });
-        client.requestCode();
+      const { data } = await httpsCallable<void, { state: string }>(firebase().functions, "startDriveConnection")();
+      window.localStorage.setItem("tpt-drive-oauth-state", data.state);
+      const client = window.google.accounts.oauth2.initCodeClient({
+        client_id: CLIENT_ID,
+        scope: "openid email https://www.googleapis.com/auth/drive",
+        ux_mode: "redirect",
+        redirect_uri: `${window.location.origin}/`,
+        state: data.state,
+        select_account: true,
+        prompt: "consent select_account",
       });
-      const result = await httpsCallable<{ code: string }, Status>(firebase().functions, "completeDriveConnection")({ code });
-      setStatus(result.data);
-      setMessage(`Google Drive conectado como ${result.data.email}. Los reportes de tus actividades se guardarán automáticamente.`);
+      client.requestCode();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo conectar Google Drive.");
     } finally {
